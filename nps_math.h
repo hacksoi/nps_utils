@@ -11,6 +11,10 @@
 
 #define ROOT2 1.4142135623730950488016887242097f
 
+#define EXPANDV2(V) V.X, V.Y
+#define EXPANDV3(V) V.X, V.Y, V.Z
+#define EXPANDV4(V) V.X, V.Y, V.Z, V.W
+
 /* Structs */
 
 union v2
@@ -78,7 +82,13 @@ union quaternion
     };
 };
 
-struct ray
+struct ray2
+{
+    v2 Position;
+    v2 Direction;
+};
+
+struct ray3
 {
     v3 Position;
     v3 Direction;
@@ -111,6 +121,14 @@ struct plane
     v3 Normal;
 };
 
+struct rect2
+{
+    v2 BottomLeft;
+    v2 BottomRight;
+    v2 TopRight;
+    v2 TopLeft;
+};
+
 #define RECT_BOTTOMLEFT 0
 #define RECT_BOTTOMRIGHT 1
 #define RECT_TOPRIGHT 2
@@ -119,7 +137,7 @@ global uint32_t GlobalRectIndices[] = {
     RECT_BOTTOMLEFT, RECT_BOTTOMRIGHT, RECT_TOPRIGHT,
     RECT_BOTTOMLEFT, RECT_TOPRIGHT, RECT_TOPLEFT,
 };
-union rect2
+union rect2_3d
 {
     v3 Corners[4];
 
@@ -184,6 +202,21 @@ Swap(float *A, float *B)
     float Tmp = *A;
     *A = *B;
     *B = *A;
+}
+
+inline internal float
+Clamp01(float X)
+{
+    if(X < 0.0f)
+    {
+        X = 0.0f;
+    }
+    else if(X > 1.0f)
+    {
+        X = 1.0f;
+    }
+
+    return X;
 }
 
 /* Vectors */
@@ -346,6 +379,13 @@ GetLength(v2 V)
     return Result;
 }
 
+inline internal float
+GetDistance(v2 A, v2 B)
+{
+    float Result = GetLength(B - A);
+    return Result;
+}
+
 inline internal void
 Normalize(v2 *V)
 {
@@ -381,6 +421,13 @@ inline internal float
 Dot(v3 A, v3 B)
 {
     float Result = A.X*B.X + A.Y*B.Y + A.Z*B.Z;
+    return Result;
+}
+
+inline internal float
+Dot(v2 A, v2 B)
+{
+    float Result = A.X*B.X + A.Y*B.Y;
     return Result;
 }
 
@@ -747,20 +794,45 @@ Invert(mat4 Matrix)
     return Result;
 }
 
+/* Rays */
+
+/* https://stackoverflow.com/a/2932601/5281200 */
+v2 FindIntersection(ray2 A, ray2 B)
+{
+    v2 Result = {};
+
+    float dx = B.Position.X - A.Position.X;
+    float dy = B.Position.Y - A.Position.Y;
+    float det = B.Direction.X * A.Direction.Y - B.Direction.Y * A.Direction.X;
+    if(det != 0.0f)
+    {
+        float u = (dy * B.Direction.X - dx * B.Direction.Y) / det;
+        float v = (dy * A.Direction.X - dx * A.Direction.Y) / det;
+
+        Result = A.Position + u*A.Direction;
+    }
+    else
+    {
+        // TODO: check their positions
+    }
+
+    return Result;
+}
+
 /* Plane */
 
 /* Rectangles */
 
 inline v3
-rect2::operator[](int CornerIdx)
+rect2_3d::operator[](int CornerIdx)
 {
     return Corners[CornerIdx];
 }
 
-internal rect2
+internal rect2_3d
 GetPlaneCorners(plane Plane, float Size)
 {
-    rect2 Result;
+    rect2_3d Result;
 
     v3 OriginalNormal = V3(0.0f, 1.0f, 0.0f);
     quaternion PlaneNormalRotation = GetRotationBetween(OriginalNormal, Plane.Normal);
@@ -819,6 +891,47 @@ RotateAroundCenter(line2 Line, float AngleDegrees)
 {
     RotateAroundCenter(&Line, AngleDegrees);
     return Line;
+}
+
+internal rect2
+CreateLineRect(line2 Line, float Width)
+{
+    float HalfWidth = Width / 2.0f;
+
+    v2 Normal = GetNormal(Line);
+
+    rect2 Result;
+    Result.BottomLeft = Line.P1 - HalfWidth*Normal;
+    Result.BottomRight = Line.P2 - HalfWidth*Normal;
+    Result.TopRight = Line.P2 + HalfWidth*Normal;
+    Result.TopLeft = Line.P1 + HalfWidth*Normal;
+
+    return Result;
+}
+
+/* Calculates the value of P projected onto the line. */
+internal float
+GetProjectedCoord(v2 P, line2 Line)
+{
+    v2 LineDir = Line.P2 - Line.P1;
+    v2 RelP = P - Line.P1;
+
+    float RelPDotLineDir = Dot(RelP, LineDir);
+    float LineDirLenSq = Dot(LineDir, LineDir);
+
+    float ProjectedCoord = RelPDotLineDir / LineDirLenSq;
+    return ProjectedCoord;
+}
+
+/* Calculates point's distance to line. */
+internal float
+GetDistance(v2 P, line2 Line)
+{
+    v2 LineDir = Line.P2 - Line.P1;
+    float t = Clamp01(GetProjectedCoord(P - Line.P1, Line));
+    v2 ClosestPointOnLine = Line.P1 + t*LineDir;
+    float DistanceToLine = GetLength(P - ClosestPointOnLine);
+    return DistanceToLine;
 }
 
 #endif
