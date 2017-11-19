@@ -1,11 +1,13 @@
 #ifndef NPS_COMMON_DEFS
 #define NPS_COMMON_DEFS
 
+#include <stdint.h>
+
 #define local static
 #define global static
 #define internal static
 
-typedef int bool32;
+typedef int32_t bool32;
 
 #define Kilobytes(NumberOfKbs) (NumberOfKbs * 1024)
 #define Megabytes(NumberOfMbs) (NumberOfMbs * 1024 * 1024)

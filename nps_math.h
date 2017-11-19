@@ -1,6 +1,8 @@
 #ifndef NPS_MATH_H
 #define NPS_MATH_H
 
+#include "nps_common_defs.h"
+
 #include <math.h>
 
 /* Globals */
@@ -84,14 +86,14 @@ union quaternion
 
 struct ray2
 {
-    v2 Position;
-    v2 Direction;
+    v2 Pos;
+    v2 Dir;
 };
 
 struct ray3
 {
-    v3 Position;
-    v3 Direction;
+    v3 Pos;
+    v3 Dir;
 };
 
 union mat4
@@ -123,6 +125,11 @@ struct plane
 
 struct rect2
 {
+    v2 Min, Max;
+};
+
+struct quad2
+{
     v2 BottomLeft;
     v2 BottomRight;
     v2 TopRight;
@@ -137,7 +144,8 @@ global uint32_t GlobalRectIndices[] = {
     RECT_BOTTOMLEFT, RECT_BOTTOMRIGHT, RECT_TOPRIGHT,
     RECT_BOTTOMLEFT, RECT_TOPRIGHT, RECT_TOPLEFT,
 };
-union rect2_3d
+/* A quad in 3D */
+union quad2_3d
 {
     v3 Corners[4];
 
@@ -217,6 +225,13 @@ Clamp01(float X)
     }
 
     return X;
+}
+
+inline internal float
+Abs(float X)
+{
+    float Result = X < 0 ? -X : X;
+    return Result;
 }
 
 /* Vectors */
@@ -350,6 +365,13 @@ inline internal v3
 operator/(v3 V, float S)
 {
     v3 Result = (1.0f / S) * V;
+    return Result;
+}
+
+inline internal bool32
+IsZero(v2 A)
+{
+    bool32 Result = (A.X == 0.0f && A.Y == 0.0f);
     return Result;
 }
 
@@ -796,43 +818,76 @@ Invert(mat4 Matrix)
 
 /* Rays */
 
-/* https://stackoverflow.com/a/2932601/5281200 */
-v2 FindIntersection(ray2 A, ray2 B)
+/* Determines if the specified rays intersect and if so, sets the specified
+ * vector to the point-of-intersection. 
+ *
+ * Main algorithm copied and pasted from https://stackoverflow.com/a/2932601/5281200. 
+ */
+bool FindIntersection(v2 *PointOfIntersection, ray2 A, ray2 B)
 {
-    v2 Result = {};
+    /* The following three lines were copied and pasted. */
+    float dx = B.Pos.X - A.Pos.X;
+    float dy = B.Pos.Y - A.Pos.Y;
+    float det = B.Dir.X * A.Dir.Y - B.Dir.Y * A.Dir.X;
 
-    float dx = B.Position.X - A.Position.X;
-    float dy = B.Position.Y - A.Position.Y;
-    float det = B.Direction.X * A.Direction.Y - B.Direction.Y * A.Direction.X;
+    /* Are the rays' directions non-parallel? */
     if(det != 0.0f)
     {
-        float u = (dy * B.Direction.X - dx * B.Direction.Y) / det;
-        float v = (dy * A.Direction.X - dx * A.Direction.Y) / det;
+        /* Find u and v such that (A.Pos + u*A.Dir == B.Pos + v*B.Dir). */
+        float u = (dy * B.Dir.X - dx * B.Dir.Y) / det;
+        float v = (dy * A.Dir.X - dx * A.Dir.Y) / det;
 
-        Result = A.Position + u*A.Direction;
+        /* Do they intersect? */
+        if(u > 0.0f && v > 0.0f)
+        {
+            /* Yes. Set the point of intersection. */
+            *PointOfIntersection = A.Pos + u*A.Dir;
+
+            return true;
+        }
     }
+    /* Are they parallel? */
     else
     {
-        // TODO: check their positions
+        /* Check if rays point at each other. */
+
+        /* Try to find t such that (A.Pos + t*A.Dir = B.Pos). */
+        float tx = (B.Pos.X - A.Pos.X) / A.Dir.X;
+        float ty = (B.Pos.Y - A.Pos.Y) / A.Dir.Y;
+
+        /* This tolerance value was chosen arbitrarily. */
+        float Tolerance = 0.0001f;
+
+        /* If tx == ty, then B.Pos lies on the line defined by A and thus the
+         * two rays point at each other. */
+        if(Abs(tx - ty) < Tolerance)
+        {
+            /* We choose the point of intersection to be the halfway point
+             * between the two rays' positions. */
+            *PointOfIntersection = Lerp(A.Pos, B.Pos, 0.5f);
+
+            return true;
+        }
     }
 
-    return Result;
+    /* None of the intersection cases passed. */
+    return false;
 }
 
 /* Plane */
 
-/* Rectangles */
+/* Quads */
 
 inline v3
-rect2_3d::operator[](int CornerIdx)
+quad2_3d::operator[](int CornerIdx)
 {
     return Corners[CornerIdx];
 }
 
-internal rect2_3d
+internal quad2_3d
 GetPlaneCorners(plane Plane, float Size)
 {
-    rect2_3d Result;
+    quad2_3d Result;
 
     v3 OriginalNormal = V3(0.0f, 1.0f, 0.0f);
     quaternion PlaneNormalRotation = GetRotationBetween(OriginalNormal, Plane.Normal);
@@ -853,10 +908,30 @@ GetPlaneCorners(plane Plane, float Size)
     return Result;
 }
 
+/* Rects */
+
+internal rect2
+RectFromPosSize(v2 Position, v2 Size)
+{
+    rect2 Result = {
+        Position,
+        Position + Size,
+    };
+    return Result;
+}
+
+internal bool
+CheckInsideRectangle(v2 Point, rect2 Rectangle)
+{
+    bool32 Result = (Point.X >= Rectangle.Min.X && Point.X <= Rectangle.Max.X &&
+                     Point.Y >= Rectangle.Min.Y && Point.Y <= Rectangle.Max.Y);
+    return Result;
+}
+
 /* Lines */
 
 inline internal line2
-Line2(float X1, float Y1, float X2, float Y2)
+LINE2(float X1, float Y1, float X2, float Y2)
 {
     line2 Result = {X1, Y1, X2, Y2};
     return Result;
@@ -893,14 +968,14 @@ RotateAroundCenter(line2 Line, float AngleDegrees)
     return Line;
 }
 
-internal rect2
-CreateLineRect(line2 Line, float Width)
+internal quad2
+CreateLineQuad(line2 Line, float Width)
 {
     float HalfWidth = Width / 2.0f;
 
     v2 Normal = GetNormal(Line);
 
-    rect2 Result;
+    quad2 Result;
     Result.BottomLeft = Line.P1 - HalfWidth*Normal;
     Result.BottomRight = Line.P2 - HalfWidth*Normal;
     Result.TopRight = Line.P2 + HalfWidth*Normal;
