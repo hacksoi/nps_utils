@@ -17,4 +17,6 @@ typedef int32_t bool32;
 
 #define Assert(Expression) if(!(Expression)) *(int *)0 = 0;
 
+// TEST
+
 #endif
