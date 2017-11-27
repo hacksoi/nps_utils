@@ -7,7 +7,7 @@
 
 /* Checks for equality excluding null-terminators. */
 internal inline bool32
-npsStringEqualsWeak(char *String1, char *String2)
+StringEqualsWeak(char *String1, char *String2)
 {
     for(; (*String1 && *String2) && (*String1 == *String2); String1++, String2++);
     return !*String2;
@@ -15,7 +15,7 @@ npsStringEqualsWeak(char *String1, char *String2)
 
 /* Checks if String1 contains String2. */
 internal inline bool32
-npsStringContains(char *String1, char *String2)
+StringContains(char *String1, char *String2)
 {
     if(!String1 || !String2)
     {
