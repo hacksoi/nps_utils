@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-#include "nps_common_defs.h"
+#include "common_defs.h"
 
 /* Checks for equality excluding null-terminators. */
 internal inline bool32
@@ -31,7 +31,7 @@ StringContains(char *String1, char *String2)
     char *String1End = String1 + strlen(String1);
     for(; (size_t)(String1End - String1) >= String2Length; String1++)
     {
-        if(npsStringEqualsWeak(String1, String2))
+        if(StringEqualsWeak(String1, String2))
         {
             return true;
         }

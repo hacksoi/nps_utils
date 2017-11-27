@@ -1,7 +1,7 @@
 #ifndef NPS_MATH_H
 #define NPS_MATH_H
 
-#include "nps_common_defs.h"
+#include "common_defs.h"
 
 #include <math.h>
 
@@ -830,47 +830,50 @@ bool FindIntersection(v2 *PointOfIntersection, ray2 A, ray2 B)
     float dy = B.Pos.Y - A.Pos.Y;
     float det = B.Dir.X * A.Dir.Y - B.Dir.Y * A.Dir.X;
 
-    /* Are the rays' directions non-parallel? */
-    if(det != 0.0f)
+    bool32 NonParallel = (det != 0.0f);
+    if(NonParallel)
     {
         /* Find u and v such that (A.Pos + u*A.Dir == B.Pos + v*B.Dir). */
         float u = (dy * B.Dir.X - dx * B.Dir.Y) / det;
         float v = (dy * A.Dir.X - dx * A.Dir.Y) / det;
 
-        /* Do they intersect? */
         if(u > 0.0f && v > 0.0f)
         {
-            /* Yes. Set the point of intersection. */
             *PointOfIntersection = A.Pos + u*A.Dir;
-
             return true;
         }
     }
-    /* Are they parallel? */
     else
     {
         /* Check if rays point at each other. */
 
-        /* Try to find t such that (A.Pos + t*A.Dir = B.Pos). */
-        float tx = (B.Pos.X - A.Pos.X) / A.Dir.X;
-        float ty = (B.Pos.Y - A.Pos.Y) / A.Dir.Y;
-
-        /* This tolerance value was chosen arbitrarily. */
-        float Tolerance = 0.0001f;
-
-        /* If tx == ty, then B.Pos lies on the line defined by A and thus the
-         * two rays point at each other. */
-        if(Abs(tx - ty) < Tolerance)
+        bool32 DoIntersect = false;
+        if(A.Dir.X == 0.0f /*&& B.Dir.X == 0.0f*/)
         {
-            /* We choose the point of intersection to be the halfway point
-             * between the two rays' positions. */
-            *PointOfIntersection = Lerp(A.Pos, B.Pos, 0.5f);
+            DoIntersect = (A.Pos.X == B.Pos.X);
+        }
+        else if(A.Dir.Y == 0.0f /*&& B.Dir.Y == 0.0f*/)
+        {
+            DoIntersect = (A.Pos.Y == B.Pos.Y);
+        }
+        else
+        {
+            /* Try to find t such that (A.Pos + t*A.Dir = B.Pos). */
+            float tx = (B.Pos.X - A.Pos.X) / A.Dir.X;
+            float ty = (B.Pos.Y - A.Pos.Y) / A.Dir.Y;
 
+            float Difference = Abs(tx - ty);
+            float Tolerance = 0.0001f;
+            DoIntersect = (Difference < Tolerance);
+        }
+
+        if(DoIntersect)
+        {
+            *PointOfIntersection = Lerp(A.Pos, B.Pos, 0.5f);
             return true;
         }
     }
 
-    /* None of the intersection cases passed. */
     return false;
 }
 
