@@ -1,11 +1,41 @@
 #ifndef SHAPE_RENDERER_H
 #define SHAPE_RENDERER_H
 
-#define SR_MAX_POINTS 64
-#define SR_MAX_LINES 64
+#include "common.h"
+#include "opengl_functions.h"
 
-#define SR_NUM_POINT_ELEMENTS 6 // 6 = xyrgba
-#define SR_NUM_LINE_ELEMENTS (2*6) // 2 = p1,p2; 6 = xyrgba
+#define SHAPE_RENDERER_CAPACITY_BYTES 8192
+
+enum shape_type
+{
+    ShapeType_None,
+    ShapeType_Point,
+    ShapeType_Line,
+    ShapeType_NumTypes,
+};
+
+struct shape_renderer_group
+{
+    shape_type Type;
+    uint32_t NumElements;
+};
+
+#pragma pack(push, 1)
+struct shape_renderer_point
+{
+    float X, Y;
+    float R, G, B, A;
+};
+
+struct shape_renderer_line
+{
+    float X1, Y1;
+    float R1, G1, B1, A1;
+
+    float X2, Y2;
+    float R2, G2, B2, A2;
+};
+#pragma pack(pop)
 
 struct shape_renderer
 {
@@ -16,16 +46,29 @@ struct shape_renderer
     uint32_t Vbo;
     uint32_t Vao;
 
-    float PointData[SR_MAX_POINTS*SR_NUM_POINT_ELEMENTS];
-    float LineData[SR_MAX_LINES*SR_NUM_LINE_ELEMENTS];
-
-    uint32_t NumPoints;
-    uint32_t NumLines;
+    uint8_t *VertexData;
+    shape_type CurrentType;
+    uint8_t *InsertionPoint;
+    uint32_t NumVertices;
 };
 
-internal bool32
-InitializeShapeRenderer(shape_renderer *ShapeRenderer, uint32_t WindowWidth, uint32_t WindowHeight)
+internal void
+Reset(shape_renderer *ShapeRenderer)
 {
+    ShapeRenderer->InsertionPoint = ShapeRenderer->VertexData;
+    ShapeRenderer->NumVertices = 0;
+}
+
+internal bool32
+Initialize(shape_renderer *ShapeRenderer, uint32_t WindowWidth, uint32_t WindowHeight)
+{
+    ShapeRenderer->WindowWidth = WindowWidth;
+    ShapeRenderer->WindowHeight = WindowHeight;
+
+    ShapeRenderer->VertexData = (uint8_t *)malloc(SHAPE_RENDERER_CAPACITY_BYTES);
+    ShapeRenderer->CurrentType = ShapeType_None;
+    Reset(ShapeRenderer);
+
 const char *VertexShaderSource = R"STR(
     #version 330 core
     layout(location = 0) in vec2 Pos;
@@ -56,96 +99,118 @@ const char *FragmentShaderSource = R"STR(
     }
     )STR";
 
-    ShapeRenderer->WindowWidth = WindowWidth;
-    ShapeRenderer->WindowHeight = WindowHeight;
-
     ShapeRenderer->ShaderProgram = CreateShaderProgramVF(VertexShaderSource, FragmentShaderSource);
     if(ShapeRenderer->ShaderProgram == 0)
     {
         return false;
     }
-
     ShapeRenderer->Vbo = CreateAndBindVertexBuffer();
     ShapeRenderer->Vao = CreateAndBindVertexArray();
-
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void *)0); // position
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 6*sizeof(float), (void *)(2*sizeof(float))); // color
-    glEnableVertexAttribArray(1);
-
+    SetVertexAttributeFloat(0, 2, 6, 0);
+    SetVertexAttributeFloat(1, 4, 6, 2);
     return true;
 }
 
-internal void
-AddPoint(shape_renderer *ShapeRenderer, v2 P, v4 Color)
+inline internal uint32_t
+GetBytesUsed(shape_renderer *ShapeRenderer)
 {
-    if(ShapeRenderer->NumPoints < SR_MAX_POINTS)
-    {
-        float *InsertPoint = ShapeRenderer->PointData + SR_NUM_POINT_ELEMENTS*ShapeRenderer->NumPoints;
-
-        InsertPoint[0] = P.X;
-        InsertPoint[1] = P.Y;
-        InsertPoint[2] = Color.R;
-        InsertPoint[3] = Color.G;
-        InsertPoint[4] = Color.B;
-        InsertPoint[5] = Color.A;
-
-        ShapeRenderer->NumPoints++;
-    }
+    uint64_t Result = (uint64_t)(ShapeRenderer->InsertionPoint - ShapeRenderer->VertexData);
+    Assert(Result == (uint32_t)Result);
+    return (uint32_t)Result;
 }
 
 internal void
-AddRay(shape_renderer *ShapeRenderer, ray2 Ray, float Length, v4 Color)
-{
-    if(ShapeRenderer->NumLines < SR_MAX_LINES)
-    {
-        v2 P1 = Ray.Pos;
-        v2 P2 = Ray.Pos + Length*Ray.Dir;
-
-        float *InsertPoint = ShapeRenderer->LineData + SR_NUM_LINE_ELEMENTS*ShapeRenderer->NumLines;
-
-        InsertPoint[0] = P1.X;
-        InsertPoint[1] = P1.Y;
-        InsertPoint[2] = Color.R;
-        InsertPoint[3] = Color.G;
-        InsertPoint[4] = Color.B;
-        InsertPoint[5] = Color.A;
-
-        InsertPoint[6] = P2.X;
-        InsertPoint[7] = P2.Y;
-        InsertPoint[8] = Color.R;
-        InsertPoint[9] = Color.G;
-        InsertPoint[10] = Color.B;
-        InsertPoint[11] = Color.A;
-
-        ShapeRenderer->NumLines++;
-    }
-}
-
-internal void
-RenderAndFlush(shape_renderer *ShapeRenderer)
+Flush(shape_renderer *ShapeRenderer)
 {
     glUseProgram(ShapeRenderer->ShaderProgram);
     glBindVertexArray(ShapeRenderer->Vao);
 
     int WindowDimensionsUniformLocation = glGetUniformLocation(ShapeRenderer->ShaderProgram, "WindowDimensions");
-    //Assert(WindowDimensionsUniformLocation != -1);
+    Assert(WindowDimensionsUniformLocation != -1);
     glUniform2f(WindowDimensionsUniformLocation, (float)ShapeRenderer->WindowWidth, (float)ShapeRenderer->WindowHeight);
 
-    glPointSize(7.0f);
-    glLineWidth(3.0f);
+    FillVertexBuffer(ShapeRenderer->Vbo, ShapeRenderer->VertexData, GetBytesUsed(ShapeRenderer));
 
-    // points
-    FillVertexBuffer(ShapeRenderer->Vbo, ShapeRenderer->PointData, sizeof(ShapeRenderer->PointData));
-    glDrawArrays(GL_POINTS, 0, ShapeRenderer->NumPoints);
+    switch(ShapeRenderer->CurrentType)
+    {
+        case ShapeType_Point:
+        {
+            glPointSize(7.0f);
+            glDrawArrays(GL_POINTS, 0, ShapeRenderer->NumVertices);
+        } break;
 
-    // lines
-    FillVertexBuffer(ShapeRenderer->Vbo, ShapeRenderer->LineData, sizeof(ShapeRenderer->LineData));
-    glDrawArrays(GL_LINES, 0, 2*ShapeRenderer->NumLines);
+        case ShapeType_Line:
+        {
+            glLineWidth(3.0f);
+            glDrawArrays(GL_LINES, 0, ShapeRenderer->NumVertices);
+        } break;
+    }
 
-    ShapeRenderer->NumPoints = 0;
-    ShapeRenderer->NumLines = 0;
+    Reset(ShapeRenderer);
+}
+
+internal void
+Render(shape_renderer *ShapeRenderer)
+{
+    Flush(ShapeRenderer);
+}
+
+inline internal bool32
+HasBytesLeftFor(shape_renderer *ShapeRenderer, uint32_t Size)
+{
+    uint32_t BytesUsed = GetBytesUsed(ShapeRenderer);
+    bool32 Result = (BytesUsed + Size) < SHAPE_RENDERER_CAPACITY_BYTES;
+    return Result;
+}
+
+internal void
+AddPoint(shape_renderer *ShapeRenderer, v2 P, v4 Color)
+{
+    shape_renderer_point Point = {EXPANDV2(P), EXPANDV4(Color)};
+
+    if(ShapeRenderer->CurrentType == ShapeType_Point)
+    {
+        if(!HasBytesLeftFor(ShapeRenderer, sizeof(Point)))
+        {
+            Flush(ShapeRenderer);
+        }
+    }
+    else
+    {
+        Flush(ShapeRenderer);
+
+        ShapeRenderer->CurrentType = ShapeType_Point;
+    }
+
+    *(shape_renderer_point *)ShapeRenderer->InsertionPoint = Point;
+    ShapeRenderer->InsertionPoint += sizeof(Point);
+    ShapeRenderer->NumVertices += 1;
+}
+
+internal void
+AddRay(shape_renderer *ShapeRenderer, ray2 Ray, float Length, v4 Color)
+{
+    v2 P1 = Ray.Pos;
+    v2 P2 = Ray.Pos + Length*Ray.Dir;
+    shape_renderer_line Line = {EXPANDV2(P1), EXPANDV4(Color), EXPANDV2(P2), EXPANDV4(Color)};
+
+    if(ShapeRenderer->CurrentType == ShapeType_Line)
+    {
+        if(!HasBytesLeftFor(ShapeRenderer, sizeof(Line)))
+        {
+            Flush(ShapeRenderer);
+        }
+    }
+    else
+    {
+        Flush(ShapeRenderer);
+
+        ShapeRenderer->CurrentType = ShapeType_Line;
+    }
+
+    *(shape_renderer_line *)ShapeRenderer->InsertionPoint = Line;
+    ShapeRenderer->InsertionPoint += sizeof(Line);
+    ShapeRenderer->NumVertices += 2;
 }
 
 #endif

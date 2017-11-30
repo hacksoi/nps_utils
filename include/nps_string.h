@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-#include "common_defs.h"
+#include "common.h"
 
 /* Checks for equality excluding null-terminators. */
 internal inline bool32

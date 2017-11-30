@@ -1,7 +1,7 @@
 #ifndef NPS_MATH_H
 #define NPS_MATH_H
 
-#include "common_defs.h"
+#include "common.h"
 
 #include <math.h>
 

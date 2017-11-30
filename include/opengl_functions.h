@@ -1,63 +1,11 @@
-/* Includes */
-//{
-#include <string.h>
+#ifndef OPENGL_FUNCTIONS_H
+#define OPENGL_FUNCTIONS_H
+
 #include "glcorearb.h"
-#include "wglext.h"
-#include "common_defs.h"
-#include "nps_math.h"
-//}
 
-/* Error Messages Handling */
-//{
-internal char GlutilsErrorBuffer[512];
+#include "common.h"
+#include "glutils_error.h"
 
-inline internal char *
-GetGlutilsErrorMessage()
-{
-    return GlutilsErrorBuffer;
-}
-
-typedef void opengl_get_error_info(GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog); // i.e. glGetShaderInfoLog()
-inline internal void
-SetErrorMessageFromGLInfoFunc(uint32_t OpenGLObject, opengl_get_error_info OpenGLGetErrorInfo, char *ExitMessage)
-{
-    size_t ExitMessageLength = strlen(ExitMessage);
-    strcpy(GlutilsErrorBuffer, ExitMessage);
-    OpenGLGetErrorInfo(OpenGLObject, (GLsizei)(sizeof(GlutilsErrorBuffer) - ExitMessageLength - 1), 
-                       NULL, GlutilsErrorBuffer + ExitMessageLength);
-}
-
-inline internal void
-SetGlutilsErrorMessage(char *Format, ...)
-{
-    va_list VarArgs;
-    va_start(VarArgs, Format);
-
-    vsprintf(GlutilsErrorBuffer, Format, VarArgs);
-
-    va_end(VarArgs);
-}
-//}
-
-/* Misc */
-//{
-struct render_objects
-{
-    uint32_t ShaderProgram;
-    uint32_t Vbo, Ebo, Vao;
-};
-
-v4 NPS_RED = {1.0f, 0.0f, 0.0f, 1.0f};
-v4 NPS_GREEN = {0.0f, 1.0f, 0.0f, 1.0f};
-v4 NPS_BLUE = {0.0f, 0.0f, 1.0f, 1.0f};
-v4 NPS_YELLOW = {1.0f, 1.0f, 0.0f, 1.0f};
-v4 NPS_ORANGE = {1.0f, 0.63f, 0.48f, 1.0f};
-//}
-
-/* OpenGL Function Loader */
-//{
-
-/* OpenGL function pointers. */
 PFNGLATTACHSHADERPROC glAttachShader;
 PFNGLBINDBUFFERPROC glBindBuffer;
 PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
@@ -107,27 +55,24 @@ PFNGLPOINTSIZEPROC glPointSize;
 PFNGLPOLYGONMODEPROC glPolygonMode;
 
 internal void *
-GetGLFunctionAddress(const char *name)
+GetGLFunctionAddress(const char *FunctionName)
 {
-    /* wglGetProcAddress() returns addresses for all OpenGL functions except
-     * ones exported by OpenGL32.dll. */
-    void *p = (void *)wglGetProcAddress(name);
-
-    bool32 fail = (p == 0 || (p == (void *)0x1) || (p == (void *)0x2) || (p == (void *)0x3) || (p == (void *)-1));
-    if(fail)
+    void *FunctionAddress = (void *)wglGetProcAddress(FunctionName);
+    bool32 DidLoadFail = ((FunctionAddress == 0) || 
+                          (FunctionAddress == (void *)0x1) || 
+                          (FunctionAddress == (void *)0x2) || 
+                          (FunctionAddress == (void *)0x3) || 
+                          (FunctionAddress == (void *)-1));
+    if(DidLoadFail)
     {
-        /* Try loading from OpengGL32.dll directly. */
-
-        HMODULE module = LoadLibraryA("opengl32.dll");
-        p = (void *)GetProcAddress(module, name);
-
-        if(p == 0)
+        HMODULE OpenGLDLLHandle = LoadLibraryA("opengl32.dll");
+        FunctionAddress = (void *)GetProcAddress(OpenGLDLLHandle, FunctionName);
+        if(FunctionAddress == 0)
         {
-            SetGlutilsErrorMessage("could not load opengl function: %s\n", name);
+            SetGlutilsErrorMessage("could not load opengl function: %s\n", FunctionName);
         }
     }
-
-    return p;
+    return FunctionAddress;
 }
 
 internal bool32
@@ -137,7 +82,6 @@ LoadOpenGLFunctions()
        /* Extensions */
        (wglChoosePixelFormatARB = (PFNWGLCHOOSEPIXELFORMATARBPROC)GetGLFunctionAddress("wglChoosePixelFormatARB")) == (void *)0 ||
        (wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)GetGLFunctionAddress("wglCreateContextAttribsARB")) == (void *)0 ||
-
        /* Core OpenGL */
        (glAttachShader = (PFNGLATTACHSHADERPROC)GetGLFunctionAddress("glAttachShader")) == (void *)0 ||
        (glBindBuffer = (PFNGLBINDBUFFERPROC)GetGLFunctionAddress("glBindBuffer")) == (void *)0 ||
@@ -187,159 +131,7 @@ LoadOpenGLFunctions()
     {
         return false;
     }
-
     return true;
 }
-//}
 
-/* OpenGL Objects */
-//{
-internal uint32_t
-CreateAndBindVertexBuffer()
-{
-    uint32_t VertexBuffer;
-    glGenBuffers(1, &VertexBuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, VertexBuffer);
-    return VertexBuffer;
-}
-
-internal uint32_t
-CreateAndBindVertexArray()
-{
-    uint32_t VertexArray;
-    glGenVertexArrays(1, &VertexArray);
-    glBindVertexArray(VertexArray);
-    return VertexArray;
-}
-
-internal void
-FillVertexBuffer(uint32_t VertexBuffer, float *VertexData, uint32_t VertexDataSize, uint32_t Mode = GL_STREAM_DRAW)
-{
-    glBindBuffer(GL_ARRAY_BUFFER, VertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, VertexDataSize, VertexData, Mode);
-}
-
-internal uint32_t
-CreateShader(GLenum ShaderType, const char *ShaderSource)
-{
-    uint32_t Shader = glCreateShader(ShaderType);
-    glShaderSource(Shader, 1, &ShaderSource, NULL);
-    glCompileShader(Shader);
-
-    bool32 DidCompileSuccessfully;
-    glGetShaderiv(Shader, GL_COMPILE_STATUS, &DidCompileSuccessfully);
-    if(!DidCompileSuccessfully)
-    {
-        char *ErrorMessage;
-        switch(ShaderType)
-        {
-            case GL_VERTEX_SHADER:
-            {
-                ErrorMessage = "error compiling vertex shader: \n";
-            } break;
-
-            case GL_FRAGMENT_SHADER:
-            {
-                ErrorMessage = "error compiling fragment shader: \n";
-            } break;
-
-            case GL_GEOMETRY_SHADER:
-            {
-                ErrorMessage = "error compiling geometry shader: \n";
-            } break;
-
-            default:
-            {
-                ErrorMessage = "error compiling unknown shader type: \n";
-            } break;
-        }
-        SetErrorMessageFromGLInfoFunc(Shader, glGetShaderInfoLog, ErrorMessage);
-
-        Shader = 0;
-    }
-
-    return Shader;
-}
-
-internal uint32_t
-CreateShaderProgramVF(const char *VertexShaderSource, const char *FragmentShaderSource)
-{
-    uint32_t ShaderProgram = 0;
-
-    uint32_t VertexShader = CreateShader(GL_VERTEX_SHADER, VertexShaderSource);
-    if(VertexShader != 0)
-    {
-        uint32_t FragmentShader = CreateShader(GL_FRAGMENT_SHADER, FragmentShaderSource);
-        if(FragmentShader != 0)
-        {
-            ShaderProgram = glCreateProgram();
-
-            glAttachShader(ShaderProgram, VertexShader);
-            glAttachShader(ShaderProgram, FragmentShader);
-            glLinkProgram(ShaderProgram);
-
-            bool32 DidProgramLinkSuccessfully;
-            glGetProgramiv(ShaderProgram, GL_LINK_STATUS, &DidProgramLinkSuccessfully);
-            if(!DidProgramLinkSuccessfully)
-            {
-                SetErrorMessageFromGLInfoFunc(ShaderProgram, glGetProgramInfoLog, 
-                                              "Error linking shader program: \n");
-
-                glDeleteProgram(ShaderProgram);
-                ShaderProgram = 0;
-            }
-
-            glDeleteShader(FragmentShader);
-        }
-
-        glDeleteShader(VertexShader);
-    }
-
-    return ShaderProgram;
-}
-
-internal uint32_t
-CreateShaderProgramVGF(const char *VertexShaderSource, const char *GeometryShaderSource, const char *FragmentShaderSource)
-{
-    uint32_t ShaderProgram = 0;
-
-    uint32_t VertexShader = CreateShader(GL_VERTEX_SHADER, VertexShaderSource);
-    if(VertexShader != 0)
-    {
-        uint32_t GeometryShader = CreateShader(GL_GEOMETRY_SHADER, GeometryShaderSource);
-        if(GeometryShader != 0)
-        {
-            uint32_t FragmentShader = CreateShader(GL_FRAGMENT_SHADER, FragmentShaderSource);
-            if(FragmentShader != 0)
-            {
-                ShaderProgram = glCreateProgram();
-
-                glAttachShader(ShaderProgram, VertexShader);
-                glAttachShader(ShaderProgram, GeometryShader);
-                glAttachShader(ShaderProgram, FragmentShader);
-                glLinkProgram(ShaderProgram);
-
-                bool32 DidProgramLinkSuccessfully;
-                glGetProgramiv(ShaderProgram, GL_LINK_STATUS, &DidProgramLinkSuccessfully);
-                if(!DidProgramLinkSuccessfully)
-                {
-                    SetErrorMessageFromGLInfoFunc(ShaderProgram, glGetProgramInfoLog, 
-                                                  "Error linking shader program: \n");
-
-                    glDeleteProgram(ShaderProgram);
-
-                    ShaderProgram = 0;
-                }
-
-                glDeleteShader(FragmentShader);
-            }
-
-            glDeleteShader(GeometryShader);
-        }
-
-        glDeleteShader(VertexShader);
-    }
-
-    return ShaderProgram;
-}
-//}
+#endif
