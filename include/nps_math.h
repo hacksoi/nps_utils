@@ -4,14 +4,18 @@
 #include "common.h"
 
 #include <math.h>
+#include <float.h>
 
 /* Globals */
 
 #ifndef M_PI
     #define M_PI 3.14159265358979323846f
+    #define M_2PI (2*M_PI)
 #endif
 
 #define ROOT2 1.4142135623730950488016887242097f
+
+#define TOLERANCE 0.0001f
 
 #define EXPANDV2(V) V.X, V.Y
 #define EXPANDV3(V) V.X, V.Y, V.Z
@@ -144,6 +148,12 @@ global uint32_t GlobalRectIndices[] = {
     RECT_BOTTOMLEFT, RECT_BOTTOMRIGHT, RECT_TOPRIGHT,
     RECT_BOTTOMLEFT, RECT_TOPRIGHT, RECT_TOPLEFT,
 };
+
+struct pentagon
+{
+    v2 P1, P2, P3, P4, P5;
+};
+
 /* A quad in 3D */
 union quad2_3d
 {
@@ -160,12 +170,24 @@ union quad2_3d
     v3 operator[](int CornerIdx);
 };
 
+struct tri2
+{
+    v2 P1, P2, P3;
+};
+
 /* Misc */
 
 inline internal float
 ToRadians(float Degrees)
 {
     float Result = (Degrees * M_PI) / 180.0f;
+    return Result;
+}
+
+inline internal float
+ToDegrees(float Radians)
+{
+    float Result = (Radians * 180.0f) / M_PI;
     return Result;
 }
 
@@ -193,6 +215,7 @@ Cos(float Radians)
 inline internal float
 Acos(float Value)
 {
+    Assert(Value <= 1.0f && Value >= -1.0f);
     float Result = acosf(Value);
     return Result;
 }
@@ -201,6 +224,13 @@ inline internal float
 Sqrt(float X)
 {
     float Result = sqrtf(X);
+    return Result;
+}
+
+inline internal float
+Pow(float Base, float Exponent)
+{
+    float Result = powf(Base, Exponent);
     return Result;
 }
 
@@ -231,6 +261,48 @@ inline internal float
 Abs(float X)
 {
     float Result = X < 0 ? -X : X;
+    return Result;
+}
+
+inline internal bool
+IsWithinTolerance(float ActualValue, float Value)
+{
+    bool Result = (ActualValue > Value - TOLERANCE) && (ActualValue < Value + TOLERANCE);
+    return Result;
+}
+
+inline internal int
+Floor(float X)
+{
+    int Result = (int)floorf(X);
+    return Result;
+}
+
+inline internal float
+Max(float A, float B)
+{
+    float Result = A > B ? A : B;
+    return Result;
+}
+
+inline internal float
+Min(float A, float B)
+{
+    float Result = A < B ? A : B;
+    return Result;
+}
+
+inline internal int
+Max(int A, int B)
+{
+    int Result = A > B ? A : B;
+    return Result;
+}
+
+inline internal int
+Min(int A, int B)
+{
+    int Result = A < B ? A : B;
     return Result;
 }
 
@@ -368,10 +440,26 @@ operator/(v3 V, float S)
     return Result;
 }
 
-inline internal bool32
+inline internal bool
+operator==(v2 Left, v2 Right)
+{
+    bool Result = (Left.X == Right.X &&
+                     Left.Y == Right.Y);
+    return Result;
+}
+
+inline internal bool
+operator!=(v2 Left, v2 Right)
+{
+    bool Result = (Left.X != Right.X ||
+                     Left.Y != Right.Y);
+    return Result;
+}
+
+inline internal bool
 IsZero(v2 A)
 {
-    bool32 Result = (A.X == 0.0f && A.Y == 0.0f);
+    bool Result = (A.X == 0.0f && A.Y == 0.0f);
     return Result;
 }
 
@@ -398,6 +486,14 @@ inline internal float
 GetLength(v2 V)
 {
     float Result = GetLength(&V);
+    return Result;
+}
+
+inline internal float
+GetLengthSq(v2 V)
+{
+    float Length = GetLength(&V);
+    float Result = Length*Length;
     return Result;
 }
 
@@ -440,28 +536,39 @@ Normalize(v3 V)
 }
 
 inline internal float
-Dot(v3 A, v3 B)
-{
-    float Result = A.X*B.X + A.Y*B.Y + A.Z*B.Z;
-    return Result;
-}
-
-inline internal float
-Dot(v2 A, v2 B)
+GetDot(v2 A, v2 B)
 {
     float Result = A.X*B.X + A.Y*B.Y;
     return Result;
 }
 
 inline internal float
-AngleBetween(v3 A, v3 B)
+GetDot(v3 A, v3 B)
 {
-    float Result = Acos(Dot(A, B));
+    float Result = A.X*B.X + A.Y*B.Y + A.Z*B.Z;
+    return Result;
+}
+
+inline internal float
+GetAngleBetween(v2 A, v2 B)
+{
+    float ALengthSq = GetLengthSq(A);
+    float BLengthSq = GetLengthSq(B);
+    Assert(IsWithinTolerance(ALengthSq, 1.0f) && IsWithinTolerance(BLengthSq, 1.0f));
+
+    float Result = ToDegrees(Acos(GetDot(A, B)));
+    return Result;
+}
+
+inline internal float
+GetAngleBetween(v3 A, v3 B)
+{
+    float Result = ToDegrees(Acos(GetDot(A, B)));
     return Result;
 }
 
 inline internal v2
-Lerp(v2 A, v2 B, float t)
+Lerp(v2 A, float t, v2 B)
 {
     v2 Result = A + t*(B - A);
     return Result;
@@ -471,6 +578,20 @@ inline internal v3
 Lerp(v3 A, v3 B, float t)
 {
     v3 Result = A + t*(B - A);
+    return Result;
+}
+
+inline internal v2
+Rotate(v2 V, float AngleDegrees)
+{
+    float AngleRadians = ToRadians(AngleDegrees);
+    float sin = Sin(AngleRadians);
+    float cos = Cos(AngleRadians);
+
+    v2 Result = {
+        V.X*cos - V.Y*sin,
+        V.X*sin + V.Y*cos,
+    };
     return Result;
 }
 
@@ -494,7 +615,7 @@ inline internal quaternion
 GetRotationBetween(v3 A, v3 B)
 {
     v3 RotAxis = Cross(A, B);
-    float RotHalfAngle = AngleBetween(A, B) / 2.0f;
+    float RotHalfAngle = GetAngleBetween(A, B) / 2.0f;
     quaternion Result = {Sin(RotHalfAngle)*RotAxis, Cos(RotHalfAngle)};
     return Result;
 }
@@ -512,7 +633,7 @@ inline internal quaternion
 operator*(quaternion A, quaternion B)
 {
     v3 ResultAxis = Cross(A.Axis, B.Axis) + A.W*B.Axis + B.W*A.Axis;
-    float ResultW = A.W*B.W - Dot(A.Axis, B.Axis);
+    float ResultW = A.W*B.W - GetDot(A.Axis, B.Axis);
 
     quaternion Result = {ResultAxis, ResultW};
     return Result;
@@ -818,66 +939,52 @@ Invert(mat4 Matrix)
 
 /* Rays */
 
-/* Determines if the specified rays intersect and if so, sets the specified
- * vector to the point-of-intersection. 
- *
- * Main algorithm copied and pasted from https://stackoverflow.com/a/2932601/5281200. 
- */
-bool FindIntersection(v2 *PointOfIntersection, ray2 A, ray2 B)
+internal inline ray2
+ToRay2(line2 Line, bool NormalizeDir = true)
 {
-    /* The following three lines were copied and pasted. */
-    float dx = B.Pos.X - A.Pos.X;
-    float dy = B.Pos.Y - A.Pos.Y;
-    float det = B.Dir.X * A.Dir.Y - B.Dir.Y * A.Dir.X;
-
-    bool32 NonParallel = (det != 0.0f);
-    if(NonParallel)
+    v2 Dir = Line.P2 - Line.P1;
+    if(NormalizeDir)
     {
-        /* Find u and v such that (A.Pos + u*A.Dir == B.Pos + v*B.Dir). */
-        float u = (dy * B.Dir.X - dx * B.Dir.Y) / det;
-        float v = (dy * A.Dir.X - dx * A.Dir.Y) / det;
-
-        if(u > 0.0f && v > 0.0f)
-        {
-            *PointOfIntersection = A.Pos + u*A.Dir;
-            return true;
-        }
+        Normalize(&Dir);
     }
-    else
-    {
-        /* Check if rays point at each other. */
+    v2 Pos = Line.P1;
 
-        bool32 DoIntersect = false;
-        if(A.Dir.X == 0.0f /*&& B.Dir.X == 0.0f*/)
-        {
-            DoIntersect = (A.Pos.X == B.Pos.X);
-        }
-        else if(A.Dir.Y == 0.0f /*&& B.Dir.Y == 0.0f*/)
-        {
-            DoIntersect = (A.Pos.Y == B.Pos.Y);
-        }
-        else
-        {
-            /* Try to find t such that (A.Pos + t*A.Dir = B.Pos). */
-            float tx = (B.Pos.X - A.Pos.X) / A.Dir.X;
-            float ty = (B.Pos.Y - A.Pos.Y) / A.Dir.Y;
-
-            float Difference = Abs(tx - ty);
-            float Tolerance = 0.0001f;
-            DoIntersect = (Difference < Tolerance);
-        }
-
-        if(DoIntersect)
-        {
-            *PointOfIntersection = Lerp(A.Pos, B.Pos, 0.5f);
-            return true;
-        }
-    }
-
-    return false;
+    ray2 Result = {Pos, Dir};
+    return Result;
 }
 
-/* Plane */
+/* Triangles */
+
+internal inline tri2
+TRI2(v2 P1, v2 P2, v2 P3)
+{
+    tri2 Result = {P1, P2, P3};
+    return Result;
+}
+
+/* Copied and pasted from https://stackoverflow.com/a/1165943/5281200. */
+inline internal
+bool IsCCW(v2 A, v2 B, v2 C)
+{
+    float Edge1 = (B.X - A.X)*(B.Y + A.Y);
+    float Edge2 = (C.X - B.X)*(C.Y + B.Y);
+    float Edge3 = (A.X - C.X)*(A.Y + C.Y);
+    float Sum = Edge1 + Edge2 + Edge3;
+    bool Result = Sum < 0;
+    return Result;
+}
+
+internal float
+GetSignedArea(v2 A, v2 B, v2 C)
+{
+    float AxMinusCx = A.X - C.X;
+    float ByMinusCy = B.Y - C.Y;
+    float AyMinusCy = A.Y - C.Y;
+    float BxMinusCx = B.X - C.X;
+
+    float Result = AxMinusCx*ByMinusCy - AyMinusCy*BxMinusCx;
+    return Result;
+}
 
 /* Quads */
 
@@ -911,7 +1018,7 @@ GetPlaneCorners(plane Plane, float Size)
     return Result;
 }
 
-/* Rects */
+/* Rectangles */
 
 internal rect2
 RectFromPosSize(v2 Position, v2 Size)
@@ -924,14 +1031,38 @@ RectFromPosSize(v2 Position, v2 Size)
 }
 
 internal bool
-CheckInsideRectangle(v2 Point, rect2 Rectangle)
+IsInsideRectangle(v2 Point, rect2 Rectangle)
 {
-    bool32 Result = (Point.X >= Rectangle.Min.X && Point.X <= Rectangle.Max.X &&
+    bool Result = (Point.X >= Rectangle.Min.X && Point.X <= Rectangle.Max.X &&
                      Point.Y >= Rectangle.Min.Y && Point.Y <= Rectangle.Max.Y);
     return Result;
 }
 
+internal v2
+GetPos(rect2 Rect)
+{
+    v2 Result = Rect.Min;
+    return Result;
+}
+
+internal v2
+GetSize(rect2 Rect)
+{
+    v2 Result = {
+        Rect.Max.X - Rect.Min.X + 1,
+        Rect.Max.Y - Rect.Min.Y + 1,
+    };
+    return Result;
+}
+
 /* Lines */
+
+inline internal line2
+LINE2(v2 P1, v2 P2)
+{
+    line2 Result = {P1, P2};
+    return Result;
+}
 
 inline internal line2
 LINE2(float X1, float Y1, float X2, float Y2)
@@ -959,7 +1090,7 @@ GetNormal(line2 Line)
 inline internal void
 RotateAroundCenter(line2 *Line, float AngleDegrees)
 {
-    v2 LineCenter = Lerp(Line->P1, Line->P2, 0.5f);
+    v2 LineCenter = Lerp(Line->P1, 0.5f, Line->P2);
     RotateAround(&Line->P1, LineCenter, AngleDegrees);
     RotateAround(&Line->P2, LineCenter, AngleDegrees);
 }
@@ -974,6 +1105,8 @@ RotateAroundCenter(line2 Line, float AngleDegrees)
 internal quad2
 CreateLineQuad(line2 Line, float Width)
 {
+    Assert(Line.P1 != Line.P2);
+
     float HalfWidth = Width / 2.0f;
 
     v2 Normal = GetNormal(Line);
@@ -994,8 +1127,8 @@ GetProjectedCoord(v2 P, line2 Line)
     v2 LineDir = Line.P2 - Line.P1;
     v2 RelP = P - Line.P1;
 
-    float RelPDotLineDir = Dot(RelP, LineDir);
-    float LineDirLenSq = Dot(LineDir, LineDir);
+    float RelPDotLineDir = GetDot(RelP, LineDir);
+    float LineDirLenSq = GetDot(LineDir, LineDir);
 
     float ProjectedCoord = RelPDotLineDir / LineDirLenSq;
     return ProjectedCoord;
@@ -1005,11 +1138,216 @@ GetProjectedCoord(v2 P, line2 Line)
 internal float
 GetDistance(v2 P, line2 Line)
 {
+    float t = Clamp01(GetProjectedCoord(P, Line));
     v2 LineDir = Line.P2 - Line.P1;
-    float t = Clamp01(GetProjectedCoord(P - Line.P1, Line));
     v2 ClosestPointOnLine = Line.P1 + t*LineDir;
     float DistanceToLine = GetLength(P - ClosestPointOnLine);
     return DistanceToLine;
+}
+
+/* Hex */
+
+inline internal int
+HexToInt(char HexChar)
+{
+    int Result = -1;
+    if(HexChar >= '0' && HexChar <= '9')
+    {
+        Result = HexChar - '0';
+    }
+    else if(HexChar >= 'A' && HexChar <= 'F')
+    {
+        Result = HexChar - 'A' + 10;
+    }
+    else if(HexChar >= 'a' && HexChar <= 'f')
+    {
+        Result = HexChar - 'a' + 10;
+    }
+    return Result;
+}
+
+inline internal int
+HexToInt(char *HexString, uint64_t Length = 0)
+{
+    if(Length == 0)
+    {
+        Length = strlen(HexString);
+    }
+
+    int Result = 0;
+    for(int i = 0; i < Length; i++)
+    {
+        Result *= 16;
+        Result += HexToInt(HexString[i]);
+    }
+    return Result;
+}
+
+/* i.e. "FFFFFF" to (1, 1, 1, 1) */
+inline internal v4
+FromHexColor(char *HexString)
+{
+    Assert(strlen(HexString) == 6);
+
+    v4 Result;
+    for(int i = 0; i < 3; i++)
+    {
+        char *ColorValue = &HexString[2*i];
+        Result[i] = (HexToInt(ColorValue, 2) / 255.0f);
+    }
+    Result[3] = 1.0f;
+    return Result;
+}
+
+/* Intersections */
+
+internal inline bool
+CheckParallel(ray2 A, ray2 B)
+{
+    /* Ripped from "Real Time Collision Detection" pg 152. */
+    float SignedTriangleArea = A.Dir.X*B.Dir.Y - A.Dir.Y*B.Dir.X;
+    bool Result = (SignedTriangleArea < TOLERANCE) && (SignedTriangleArea > -TOLERANCE);
+    return Result;
+}
+
+internal inline bool
+CheckParallel(line2 A, line2 B)
+{
+    ray2 LineARay = {A.P1, A.P2 - A.P1};
+    ray2 LineBRay = {B.P1, B.P2 - B.P1};
+    bool Result = CheckParallel(LineARay, LineBRay);
+    return Result;
+}
+
+internal bool
+FindIntersection(ray2 A, ray2 B, v2 *PointOfIntersection_Out, bool BackwardsAllowed = false, float *u_Out = 0, float *v_Out = 0)
+{
+    v2 PointOfIntersection = {};
+    float u = 0, v = 0;
+    bool DoesIntersect = false;
+
+    /* The following three lines were copied and pasted. */
+    float dx = B.Pos.X - A.Pos.X;
+    float dy = B.Pos.Y - A.Pos.Y;
+    float det = B.Dir.X * A.Dir.Y - B.Dir.Y * A.Dir.X;
+
+    bool NonParallel = (det != 0.0f);
+    if(NonParallel)
+    {
+        /* Find u and v such that (A.Pos + u*A.Dir == B.Pos + v*B.Dir). */
+        u = (dy * B.Dir.X - dx * B.Dir.Y) / det;
+        v = (dy * A.Dir.X - dx * A.Dir.Y) / det;
+
+        if(BackwardsAllowed ||
+           (u >= 0.0f && v >= 0.0f))
+        {
+            PointOfIntersection = A.Pos + u*A.Dir;
+            DoesIntersect = true;
+        }
+    }
+    else
+    {
+        /* Check if rays point at each other. */
+
+        if(A.Dir.X == 0.0f /*&& B.Dir.X == 0.0f*/)
+        {
+            DoesIntersect = (A.Pos.X == B.Pos.X);
+        }
+        else if(A.Dir.Y == 0.0f /*&& B.Dir.Y == 0.0f*/)
+        {
+            DoesIntersect = (A.Pos.Y == B.Pos.Y);
+        }
+        else
+        {
+            /* Try to find t such that (A.Pos + t*A.Dir = B.Pos). */
+            float tx = (B.Pos.X - A.Pos.X) / A.Dir.X;
+            float ty = (B.Pos.Y - A.Pos.Y) / A.Dir.Y;
+
+            float Difference = Abs(tx - ty);
+            DoesIntersect = (Difference < TOLERANCE);
+        }
+
+        if(DoesIntersect)
+        {
+            PointOfIntersection = Lerp(A.Pos, 0.5f, B.Pos);
+            DoesIntersect = true;
+        }
+    }
+
+    if(PointOfIntersection_Out)
+    {
+        *PointOfIntersection_Out = PointOfIntersection;
+    }
+
+    if(u_Out)
+    {
+        *u_Out = u;
+    }
+
+    if(v_Out)
+    {
+        *v_Out = v;
+    }
+
+    return DoesIntersect;
+}
+
+internal bool
+FindIntersection(ray2 Ray, line2 Line, v2 *PointOfIntersection)
+{
+    ray2 LineRay = {Line.P1, Line.P2 - Line.P1};
+    float u, v;
+    if(!FindIntersection(Ray, LineRay, PointOfIntersection, false, &u, &v))
+    {
+        return false;
+    }
+    return (v >= 0.0f && v <= 1.0f);
+}
+
+internal bool
+DoesIntersect(ray2 A, ray2 B)
+{
+    bool Result = FindIntersection(A, B, 0);
+    return Result;
+}
+
+/* Copied and pasted from "Real-Time Collision Detection" pg 152. */
+internal bool
+FindIntersection(line2 LineA, line2 LineB, v2 *PointOfIntersection_Out)
+{
+    v2 PointOfIntersection = {};
+    bool DoesIntersect = false;
+
+    v2 a = LineA.P1, b = LineA.P2;
+    v2 c = LineB.P1, d = LineB.P2;
+
+    float a1 = GetSignedArea(a, b, d);
+    float a2 = GetSignedArea(a, b, c);
+    if(a1 != 0.0f && a2 != 0.0f && a1*a2 < 0.0f)
+    {
+        float a3 = GetSignedArea(c, d, a);
+        float a4 = a3 + a2 - a1;
+        if(a3 != 0.0f && a4 != 0.0f && a3*a4 < 0.0f)
+        {
+            float t = a3 / (a3 - a4);
+            PointOfIntersection = a + t*(b - a);
+            DoesIntersect = true;
+        }
+    }
+
+    if(PointOfIntersection_Out)
+    {
+        *PointOfIntersection_Out = PointOfIntersection;
+    }
+
+    return DoesIntersect;
+}
+
+internal bool
+DoesIntersect(line2 A, line2 B)
+{
+    bool Result = FindIntersection(A, B, 0);
+    return Result;
 }
 
 #endif

@@ -6,7 +6,7 @@
 #include "common.h"
 
 /* Checks for equality excluding null-terminators. */
-internal inline bool32
+internal inline bool
 StringEqualsWeak(char *String1, char *String2)
 {
     for(; (*String1 && *String2) && (*String1 == *String2); String1++, String2++);
@@ -14,7 +14,7 @@ StringEqualsWeak(char *String1, char *String2)
 }
 
 /* Checks if String1 contains String2. */
-internal inline bool32
+internal inline bool
 StringContains(char *String1, char *String2)
 {
     if(!String1 || !String2)
@@ -40,4 +40,35 @@ StringContains(char *String1, char *String2)
     return false;
 }
 
+internal inline void
+Reverse(char *String, int Length)
+{
+    for(int i = 0; i < Length/2; i++)
+    {
+        char Tmp = String[i];
+        String[i] = String[Length - i - 1];
+        String[Length - i - 1] = Tmp;
+    }
+}
+
+internal inline uint32_t
+ConvertToString(char *Dest, int Value)
+{
+    if(Value < 0)
+    {
+        return 0;
+    }
+
+    int NumDigits = 0;
+    do
+    {
+        Dest[NumDigits++] = '0' + (Value % 10);
+        Value /= 10;
+    }
+    while(Value > 0);
+
+    Reverse(Dest, NumDigits);
+
+    return NumDigits;
+}
 #endif

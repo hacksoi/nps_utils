@@ -30,6 +30,7 @@ PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation;
 PFNGLLINKPROGRAMPROC glLinkProgram;
 PFNGLSHADERSOURCEPROC glShaderSource;
 PFNGLUNIFORM1UIPROC glUniform1ui;
+PFNGLUNIFORM1IPROC glUniform1i;
 PFNGLUNIFORM2FPROC glUniform2f;
 PFNGLUNIFORM2IPROC glUniform2i;
 PFNGLUSEPROGRAMPROC glUseProgram;
@@ -53,12 +54,24 @@ PFNGLLINEWIDTHPROC glLineWidth;
 PFNGLBLENDEQUATIONPROC glBlendEquation;
 PFNGLPOINTSIZEPROC glPointSize;
 PFNGLPOLYGONMODEPROC glPolygonMode;
+PFNGLHINTPROC glHint;
+PFNGLGETINTEGERVPROC glGetIntegerv;
+PFNGLGETATTRIBLOCATIONPROC glGetAttribLocation;
+PFNGLACTIVETEXTUREPROC glActiveTexture;
+PFNGLISENABLEDPROC glIsEnabled;
+PFNGLSCISSORPROC glScissor;
+PFNGLBLENDEQUATIONSEPARATEPROC glBlendEquationSeparate;
+PFNGLBLENDFUNCSEPARATEPROC glBlendFuncSeparate;
+PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers;
+PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
+PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
+PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
 
 internal void *
 GetGLFunctionAddress(const char *FunctionName)
 {
     void *FunctionAddress = (void *)wglGetProcAddress(FunctionName);
-    bool32 DidLoadFail = ((FunctionAddress == 0) || 
+    bool DidLoadFail = ((FunctionAddress == 0) || 
                           (FunctionAddress == (void *)0x1) || 
                           (FunctionAddress == (void *)0x2) || 
                           (FunctionAddress == (void *)0x3) || 
@@ -75,7 +88,7 @@ GetGLFunctionAddress(const char *FunctionName)
     return FunctionAddress;
 }
 
-internal bool32
+internal bool
 LoadOpenGLFunctions()
 {
     if(
@@ -126,7 +139,20 @@ LoadOpenGLFunctions()
        (glBlendEquation = (PFNGLBLENDEQUATIONPROC)GetGLFunctionAddress("glBlendEquation")) == (void *)0 ||
        (glPointSize = (PFNGLPOINTSIZEPROC)GetGLFunctionAddress("glPointSize")) == (void *)0 ||
        (glPolygonMode = (PFNGLPOLYGONMODEPROC)GetGLFunctionAddress("glPolygonMode")) == (void *)0 ||
-       (glDeleteProgram = (PFNGLDELETEPROGRAMPROC)GetGLFunctionAddress("glDeleteProgram")) == (void *)0
+       (glDeleteProgram = (PFNGLDELETEPROGRAMPROC)GetGLFunctionAddress("glDeleteProgram")) == (void *)0 ||
+       (glUniform1i = (PFNGLUNIFORM1IPROC)GetGLFunctionAddress("glUniform1i")) == (void *)0 ||
+       (glHint = (PFNGLHINTPROC)GetGLFunctionAddress("glHint")) == (void *)0 ||
+       (glGetIntegerv = (PFNGLGETINTEGERVPROC)GetGLFunctionAddress("glGetIntegerv")) == (void *)0 ||
+       (glGetAttribLocation = (PFNGLGETATTRIBLOCATIONPROC)GetGLFunctionAddress("glGetAttribLocation")) == (void *)0 ||
+       (glActiveTexture = (PFNGLACTIVETEXTUREPROC)GetGLFunctionAddress("glActiveTexture")) == (void *)0 ||
+       (glIsEnabled = (PFNGLISENABLEDPROC)GetGLFunctionAddress("glIsEnabled")) == (void *)0 ||
+       (glScissor = (PFNGLSCISSORPROC)GetGLFunctionAddress("glScissor")) == (void *)0 ||
+       (glBlendEquationSeparate = (PFNGLBLENDEQUATIONSEPARATEPROC)GetGLFunctionAddress("glBlendEquationSeparate")) == (void *)0 ||
+       (glBlendFuncSeparate = (PFNGLBLENDFUNCSEPARATEPROC)GetGLFunctionAddress("glBlendFuncSeparate")) == (void *)0 ||
+       (glGenFramebuffers = (PFNGLGENFRAMEBUFFERSPROC)GetGLFunctionAddress("glGenFramebuffers")) == (void *)0 ||
+       (glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)GetGLFunctionAddress("glBindFramebuffer")) == (void *)0 ||
+       (glFramebufferTexture2D = (PFNGLFRAMEBUFFERTEXTURE2DPROC)GetGLFunctionAddress("glFramebufferTexture2D")) == (void *)0 ||
+       (glCheckFramebufferStatus = (PFNGLCHECKFRAMEBUFFERSTATUSPROC)GetGLFunctionAddress("glCheckFramebufferStatus")) == (void *)0
        )
     {
         return false;

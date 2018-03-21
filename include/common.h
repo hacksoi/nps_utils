@@ -7,8 +7,6 @@
 #define global static
 #define internal static
 
-typedef int32_t bool32;
-
 #define Kilobytes(NumberOfKbs) (NumberOfKbs * 1024)
 #define Megabytes(NumberOfMbs) (NumberOfMbs * 1024 * 1024)
 #define Gigabytes(NumberOfGbs) (NumberOfGbs * 1024 * 1024 * 1024)
