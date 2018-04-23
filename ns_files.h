@@ -1,72 +1,73 @@
 #ifndef NS_FILES_H
 #define NS_FILES_H
 
+#include "ns_common.h"
+
 #include <stdlib.h>
 
 
 struct NsFile
 {
-    FILE *file_pointer;
+    FILE *internal_file;
 };
 
 
-bool open(NpsFile *file, char *filename)
+bool ns_file_open(NsFile *file, char *filename)
 {
-    file->file_pointer = fopen(filename, "rb");
-    if(file_fp == NULL)
+    file->internal_file = fopen(filename, "rb");
+    if(file->internal_file == NULL)
     {
-        DEBUG_PRINT_INFO();
-        return false;
+        DebugPrintInfo();
+        return NS_ERROR;
     }
-    return true;
+    return NS_SUCCESS;
 }
 
-bool close(NpsFile *file)
+int ns_file_close(NsFile *file)
 {
-    if(fclose(file_fp) == EOF)
+    if(fclose(file->internal_file) == EOF)
     {
-        DEBUG_PRINT_INFO();
-        return false;
+        DebugPrintInfo();
+        return NS_ERROR;
     }
-    return true;
+    return NS_SUCCESS;
 }
 
-int get_filesize(NpsFile *file)
+int ns_file_get_filesize(NsFile *file)
 {
-    FILE *file_pointer = file->file_pointer;
+    FILE *internal_file = file->internal_file;
 
-    if(fseek(file_pointer, 0, SEEK_END) != 0)
+    if(fseek(internal_file, 0, SEEK_END) != 0)
     {
-        DEBUG_PRINT_INFO();
-        return -1;
+        DebugPrintInfo();
+        return NS_ERROR;
     }
 
-    int filesize = ftell(file_pointer);
+    int filesize = ftell(internal_file);
     if(filesize == -1)
     {
-        DEBUG_PRINT_INFO();
-        return -1;
+        DebugPrintInfo();
+        return NS_ERROR;
     }
 
-    rewind(file_pointer);
+    rewind(internal_file);
 
     return filesize;
 }
 
-int load(NpsFile *file, char *buffer, uint32_t buffer_size)
+int ns_file_load(NsFile *file, char *buffer, int buffer_size)
 {
-    int filesize = get_filesize(file);
+    int filesize = ns_file_get_filesize(file);
     if(buffer_size < filesize)
     {
-        DEBUG_PRINT_INFO();
-        return -1;
+        return NS_ERROR;
     }
 
-    int bytes_read = fread(buffer, 1, filesize, file->file_pointer);
+    int bytes_read = fread(buffer, 1, filesize, file->internal_file);
     if(bytes_read != filesize)
     {
-        DEBUG_PRINT_INFO();
-        return -1;
+        DebugPrintInfo();
+        return NS_ERROR;
     }
 
     return bytes_read;

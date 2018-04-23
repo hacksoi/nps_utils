@@ -1,12 +1,15 @@
 #ifndef NS_SHA1_H
 #define NS_SHA1_H
 
+#include "ns_util.h"
+
+
 /* From pseudo code on Wikipedia. Returns sha1 hash as a base64 string (28 bytes). */
-bool sha1(char *string, char *dest)
+int ns_sha1(char *string, char *dest)
 {
     if(strlen(string) > 1024)
     {
-        return false;
+        return NS_ERROR;
     }
 
     char message[1024];
@@ -89,7 +92,7 @@ bool sha1(char *string, char *dest)
         for(uint32_t j = 16; j < ArrayCount(w); j++)
         {
             w[j] = (w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16]);
-            w[j] = left_rotate(w[j], 1);
+            w[j] = ns_left_rotate(w[j], 1);
         }
 
         // initialize hash value for this chunk:
@@ -126,10 +129,10 @@ bool sha1(char *string, char *dest)
                 k = 0xCA62C1D6;
             }
 
-            int temp = (left_rotate(a, 5) + f + e + k + w[j]);
+            int temp = (ns_left_rotate(a, 5) + f + e + k + w[j]);
             e = d;
             d = c;
-            c = left_rotate(b, 30);
+            c = ns_left_rotate(b, 30);
             b = a;
             a = temp;
         }
@@ -183,10 +186,10 @@ bool sha1(char *string, char *dest)
             uint8_t third =  ((three_set >>  6) & 0x3f);
             uint8_t fourth = ((three_set >>  0) & 0x3f);
 
-            dest[dest_idx + 0] = to_base64(first);
-            dest[dest_idx + 1] = to_base64(second);
-            dest[dest_idx + 2] = to_base64(third);
-            dest[dest_idx + 3] = to_base64(fourth);
+            dest[dest_idx + 0] = ns_to_base64(first);
+            dest[dest_idx + 1] = ns_to_base64(second);
+            dest[dest_idx + 2] = ns_to_base64(third);
+            dest[dest_idx + 3] = ns_to_base64(fourth);
         }
 
         assert(i == 18);
@@ -200,9 +203,9 @@ bool sha1(char *string, char *dest)
             uint8_t second = ((three_set >> 12) & 0x3f);
             uint8_t third =  ((three_set >>  6) & 0x3f);
 
-            dest[dest_idx + 0] = to_base64(first);
-            dest[dest_idx + 1] = to_base64(second);
-            dest[dest_idx + 2] = to_base64(third);
+            dest[dest_idx + 0] = ns_to_base64(first);
+            dest[dest_idx + 1] = ns_to_base64(second);
+            dest[dest_idx + 2] = ns_to_base64(third);
             dest[dest_idx + 3] = '=';
         }
 
@@ -210,7 +213,7 @@ bool sha1(char *string, char *dest)
         dest[dest_idx + 4] = 0;
     }
 
-    return true;
+    return NS_SUCCESS;
 }
 
 #endif

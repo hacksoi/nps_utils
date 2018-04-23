@@ -9,6 +9,7 @@
 
     #pragma comment(lib, "Ws2_32.lib")
 #elif defined(LINUX)
+    #include <unistd.h>
     #include <sys/types.h>
     #include <sys/socket.h>
     #include <netinet/in.h>
@@ -21,34 +22,24 @@
     typedef SOCKET InternalSocket;
     #define NS_INVALID_SOCKET INVALID_SOCKET
     #define NS_SOCKET_ERROR SOCKET_ERROR
+    #define NS_SOCKET_RDWR SD_BOTH
     #define DebugSocketPrintInfo() DebugPrintInfo(); fprintf(stderr, "    socket error code: %d", WSAGetLastError());
 #elif defined(LINUX)
     typedef int InternalSocket;
     #define NS_INVALID_SOCKET -1
     #define NS_SOCKET_ERROR -1
-    #define DebugSocketPrintInfo() DebugPrintInfo()
+    #define NS_SOCKET_RDWR SHUT_RDWR
+    #define DebugSocketPrintInfo() DebugPrintInfo(); perror("    error")
 #endif
 
+
+/* Internal */
 
 struct NsSocket
 {
     InternalSocket internal_socket;
 };
 
-
-#if defined(WINDOWS)
-int ns_init_sockets()
-{
-    WSADATA wsaData;
-    int iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
-    if (iResult != 0) {
-        printf("WSAStartup failed: %d\n", iResult);
-        return NS_ERROR;
-    }
-    return NS_SUCCESS;
-}
-#elif defined(LINUX)
-#endif
 
 // get sockaddr, IPv4 or IPv6:
 void *ns_get_in_addr(struct sockaddr *sa)
@@ -61,7 +52,23 @@ void *ns_get_in_addr(struct sockaddr *sa)
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-int ns_create_socket(NsSocket *ns_socket, const char *port, int backlog = 10)
+/* API */
+
+int ns_sockets_init()
+{
+#if defined(WINDOWS)
+    WSADATA wsaData;
+    int iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+    if (iResult != 0) {
+        printf("WSAStartup failed: %d\n", iResult);
+        return NS_ERROR;
+    }
+#elif defined(LINUX)
+#endif
+    return NS_SUCCESS;
+}
+
+int ns_socket_create(NsSocket *ns_socket, const char *port, int backlog = 10)
 {
     int status;
 
@@ -112,7 +119,19 @@ int ns_create_socket(NsSocket *ns_socket, const char *port, int backlog = 10)
     return NS_SUCCESS;
 }
 
-int ns_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t timeout_millis = 0, const char *name = NULL)
+int ns_socket_close(NsSocket *socket)
+{
+#if defined(WINDOWS)
+#elif defined(LINUX)
+    if(close(socket->internal_socket) == -1)
+    {
+        return NS_ERROR;
+    }
+#endif
+    return NS_SUCCESS;
+}
+
+int ns_socket_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t timeout_millis = 0, const char *name = NULL)
 {
     InternalSocket internal_socket = ns_socket->internal_socket;
 
@@ -120,7 +139,7 @@ int ns_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t timeout
     {
         fd_set rfds;
         FD_ZERO(&rfds);
-        FD_SET(ns_socket->internal_socket, &rfds);
+        FD_SET(internal_socket, &rfds);
 
         timeval tv = {};
         tv.tv_usec = 1000*timeout_millis;
@@ -141,7 +160,7 @@ int ns_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t timeout
     sockaddr_storage their_addr;
     socklen_t sin_size = sizeof(their_addr);
     InternalSocket internal_client_socket = accept(internal_socket, (sockaddr *)&their_addr, &sin_size);
-    if(internal_client_socket == INVALID_SOCKET)
+    if(internal_client_socket == NS_INVALID_SOCKET)
     {
         DebugSocketPrintInfo();
         return NS_ERROR;
@@ -156,6 +175,53 @@ int ns_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t timeout
 
     client_socket->internal_socket = internal_client_socket;
 
+    return NS_SUCCESS;
+}
+
+int ns_socket_send(NsSocket *socket, char *buffer, uint32_t buffer_size)
+{
+    int bytes_sent = send(socket->internal_socket, buffer, buffer_size, 0);
+    if(bytes_sent == NS_SOCKET_ERROR)
+    {
+        DebugPrintInfo();
+        return NS_ERROR;
+    }
+    return bytes_sent;
+}
+
+int ns_socket_send(NsSocket *socket, uint8_t *buffer, uint32_t buffer_size)
+{
+    int bytes_sent = ns_socket_send(socket, (char *)buffer, buffer_size);
+    return bytes_sent;
+}
+
+int ns_socket_receive(NsSocket *socket, char *buffer, uint32_t buffer_size)
+{
+    int bytes_received = recv(socket->internal_socket, buffer, buffer_size, 0);
+    if(bytes_received == NS_SOCKET_ERROR)
+    {
+        DebugPrintInfo();
+        return NS_ERROR;
+    }
+    return bytes_received;
+}
+
+int ns_socket_receive(NsSocket *socket, uint8_t *buffer, uint32_t buffer_size)
+{
+    int bytes_received = ns_socket_receive(socket, (char *)buffer, buffer_size);
+    return bytes_received;
+}
+
+int ns_socket_shutdown(NsSocket *socket, int how)
+{
+#if defined(WINDOWS)
+#elif defined(LINUX)
+    if(shutdown(socket->internal_socket, how))
+    {
+        DebugPrintInfo();
+        return NS_ERROR;
+    }
+#endif
     return NS_SUCCESS;
 }
 

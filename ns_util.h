@@ -6,7 +6,7 @@
 
 /* Bits */
 
-uint32_t left_rotate(uint32_t value, int rots)
+uint32_t ns_left_rotate(uint32_t value, int rots)
 {
     uint32_t mask = 0x80000000;
     for(int i = 1; i < rots; i++)
@@ -21,14 +21,14 @@ uint32_t left_rotate(uint32_t value, int rots)
 
 /* Bytes */
 
-uint16_t get16be(uint8_t *src)
+uint16_t ns_get16be(uint8_t *src)
 {
     uint16_t result = ((src[0] << 8) |
                        (src[1] << 0));
     return result;
 }
 
-uint64_t get64be(uint8_t *src)
+uint64_t ns_get64be(uint8_t *src)
 {
     uint16_t result = (((uint64_t)src[0] << 56) |
                        ((uint64_t)src[1] << 48) |
@@ -41,13 +41,13 @@ uint64_t get64be(uint8_t *src)
     return result;
 }
 
-void put16be(uint8_t *dest, uint16_t src)
+void ns_put16be(uint8_t *dest, uint16_t src)
 {
     dest[0] = ((src & 0xff00) >> 8);
     dest[1] = ((src & 0x00ff) >> 0);
 }
 
-void put64be(uint8_t *dest, uint64_t src)
+void ns_put64be(uint8_t *dest, uint64_t src)
 {
     dest[0] = ((src & 0xff00000000000000) >> 56);
     dest[1] = ((src & 0x00ff000000000000) >> 48);
@@ -61,8 +61,7 @@ void put64be(uint8_t *dest, uint64_t src)
 
 /* Hex */
 
-inline internal int
-hex_to_int(char HexChar)
+inline internal int ns_hex_to_int(char HexChar)
 {
     int Result = -1;
     if(HexChar >= '0' && HexChar <= '9')
@@ -80,26 +79,25 @@ hex_to_int(char HexChar)
     return Result;
 }
 
-inline internal int
-hex_to_int(char *HexString, uint64_t Length = 0)
+inline internal int ns_hex_to_int(char *HexString, uint64_t Length = 0)
 {
     if(Length == 0)
     {
         Length = strlen(HexString);
     }
 
-    int Result = 0;
-    for(int i = 0; i < Length; i++)
+    uint32_t Result = 0;
+    for(uint32_t i = 0; i < Length; i++)
     {
         Result *= 16;
-        Result += HexToInt(HexString[i]);
+        Result += ns_hex_to_int(HexString[i]);
     }
     return Result;
 }
 
+#if 0
 /* i.e. "FFFFFF" to (1, 1, 1, 1) */
-inline internal v4
-from_hex_color(char *HexString)
+inline internal v4 ns_from_hex_color(char *HexString)
 {
     Assert(strlen(HexString) == 6);
 
@@ -107,15 +105,16 @@ from_hex_color(char *HexString)
     for(int i = 0; i < 3; i++)
     {
         char *ColorValue = &HexString[2*i];
-        Result[i] = (HexToInt(ColorValue, 2) / 255.0f);
+        Result[i] = (ns_hex_to_int(ColorValue, 2) / 255.0f);
     }
     Result[3] = 1.0f;
     return Result;
 }
+#endif
 
 /* Base64 */
 
-inline char int_to_base64(int Value)
+inline char ns_to_base64(int Value)
 {
     char Result;
     if(Value <= 25)
