@@ -1,5 +1,5 @@
-#ifndef SHAPE_RENDERER_H
-#define SHAPE_RENDERER_H
+#ifndef NS_SHAPE_RENDERER_H
+#define NS_SHAPE_RENDERER_H
 
 #include "common.h"
 #include "opengl_functions.h"

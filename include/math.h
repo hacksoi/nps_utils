@@ -1,5 +1,5 @@
-#ifndef NPS_MATH_H
-#define NPS_MATH_H
+#ifndef NS_MATH_H
+#define NS_MATH_H
 
 #include "common.h"
 
@@ -7,6 +7,7 @@
 #include <float.h>
 
 /* Globals */
+//{
 
 #ifndef M_PI
     #define M_PI 3.14159265358979323846f
@@ -20,8 +21,10 @@
 #define EXPANDV2(V) V.X, V.Y
 #define EXPANDV3(V) V.X, V.Y, V.Z
 #define EXPANDV4(V) V.X, V.Y, V.Z, V.W
+//}
 
 /* Structs */
+//{
 
 union v2
 {
@@ -174,8 +177,10 @@ struct tri2
 {
     v2 P1, P2, P3;
 };
+//}
 
 /* Misc */
+//{
 
 inline internal float
 ToRadians(float Degrees)
@@ -278,17 +283,10 @@ Floor(float X)
     return Result;
 }
 
-inline internal float
-Max(float A, float B)
+inline internal int
+Min(int A, int B)
 {
-    float Result = A > B ? A : B;
-    return Result;
-}
-
-inline internal float
-Min(float A, float B)
-{
-    float Result = A < B ? A : B;
+    int Result = A < B ? A : B;
     return Result;
 }
 
@@ -299,14 +297,23 @@ Max(int A, int B)
     return Result;
 }
 
-inline internal int
-Min(int A, int B)
+inline internal float
+Min(float A, float B)
 {
-    int Result = A < B ? A : B;
+    float Result = A < B ? A : B;
     return Result;
 }
 
+inline internal float
+Max(float A, float B)
+{
+    float Result = A > B ? A : B;
+    return Result;
+}
+//}
+
 /* Vectors */
+//{
 
 inline internal v2
 V2(float X, float Y)
@@ -621,6 +628,7 @@ GetRotationBetween(v3 A, v3 B)
 }
 
 /* Quaternions */
+//{
 
 inline internal quaternion
 Conjugate(quaternion Quat)
@@ -667,8 +675,10 @@ Rotate(v3 *Vector, v3 Axis, float RotationDegrees)
     quaternion RotQuat = {SinHalfAngle*Axis, CosHalfAngle};
     Rotate(Vector, RotQuat);
 }
+//}
 
 /* Matrices */
+//{
 
 inline float &
 mat4::operator[](int ElementIdx)
@@ -936,8 +946,10 @@ Invert(mat4 Matrix)
 
     return Result;
 }
+//}
 
 /* Rays */
+//{
 
 internal inline ray2
 ToRay2(line2 Line, bool NormalizeDir = true)
@@ -952,8 +964,10 @@ ToRay2(line2 Line, bool NormalizeDir = true)
     ray2 Result = {Pos, Dir};
     return Result;
 }
+//}
 
 /* Triangles */
+//{
 
 internal inline tri2
 TRI2(v2 P1, v2 P2, v2 P3)
@@ -985,8 +999,10 @@ GetSignedArea(v2 A, v2 B, v2 C)
     float Result = AxMinusCx*ByMinusCy - AyMinusCy*BxMinusCx;
     return Result;
 }
+//}
 
 /* Quads */
+//{
 
 inline v3
 quad2_3d::operator[](int CornerIdx)
@@ -1017,8 +1033,10 @@ GetPlaneCorners(plane Plane, float Size)
 
     return Result;
 }
+//}
 
 /* Rectangles */
+//{
 
 internal rect2
 RectFromPosSize(v2 Position, v2 Size)
@@ -1054,8 +1072,10 @@ GetSize(rect2 Rect)
     };
     return Result;
 }
+//}
 
 /* Lines */
+//{
 
 inline internal line2
 LINE2(v2 P1, v2 P2)
@@ -1144,62 +1164,10 @@ GetDistance(v2 P, line2 Line)
     float DistanceToLine = GetLength(P - ClosestPointOnLine);
     return DistanceToLine;
 }
-
-/* Hex */
-
-inline internal int
-HexToInt(char HexChar)
-{
-    int Result = -1;
-    if(HexChar >= '0' && HexChar <= '9')
-    {
-        Result = HexChar - '0';
-    }
-    else if(HexChar >= 'A' && HexChar <= 'F')
-    {
-        Result = HexChar - 'A' + 10;
-    }
-    else if(HexChar >= 'a' && HexChar <= 'f')
-    {
-        Result = HexChar - 'a' + 10;
-    }
-    return Result;
-}
-
-inline internal int
-HexToInt(char *HexString, uint64_t Length = 0)
-{
-    if(Length == 0)
-    {
-        Length = strlen(HexString);
-    }
-
-    int Result = 0;
-    for(int i = 0; i < Length; i++)
-    {
-        Result *= 16;
-        Result += HexToInt(HexString[i]);
-    }
-    return Result;
-}
-
-/* i.e. "FFFFFF" to (1, 1, 1, 1) */
-inline internal v4
-FromHexColor(char *HexString)
-{
-    Assert(strlen(HexString) == 6);
-
-    v4 Result;
-    for(int i = 0; i < 3; i++)
-    {
-        char *ColorValue = &HexString[2*i];
-        Result[i] = (HexToInt(ColorValue, 2) / 255.0f);
-    }
-    Result[3] = 1.0f;
-    return Result;
-}
+//}
 
 /* Intersections */
+//{
 
 internal inline bool
 CheckParallel(ray2 A, ray2 B)
@@ -1349,5 +1317,6 @@ DoesIntersect(line2 A, line2 B)
     bool Result = FindIntersection(A, B, 0);
     return Result;
 }
+//}
 
 #endif

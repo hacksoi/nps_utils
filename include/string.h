@@ -1,13 +1,13 @@
-#ifndef NPS_STRING_H
-#define NPS_STRING_H
-
-#include <string.h>
+#ifndef NS_STRING_H
+#define NS_STRING_H
 
 #include "common.h"
 
+#include <string.h>
+
 /* Checks for equality excluding null-terminators. */
 internal inline bool
-StringEqualsWeak(char *String1, char *String2)
+string_equals_weak(char *String1, char *String2)
 {
     for(; (*String1 && *String2) && (*String1 == *String2); String1++, String2++);
     return !*String2;
@@ -15,7 +15,7 @@ StringEqualsWeak(char *String1, char *String2)
 
 /* Checks if String1 contains String2. */
 internal inline bool
-StringContains(char *String1, char *String2)
+string_contains(char *String1, char *String2)
 {
     if(!String1 || !String2)
     {
@@ -41,7 +41,7 @@ StringContains(char *String1, char *String2)
 }
 
 internal inline void
-Reverse(char *String, int Length)
+reverse(char *String, int Length)
 {
     for(int i = 0; i < Length/2; i++)
     {
@@ -52,7 +52,7 @@ Reverse(char *String, int Length)
 }
 
 internal inline uint32_t
-ConvertToString(char *Dest, int Value)
+convert_to_string(char *Dest, int Value)
 {
     if(Value < 0)
     {

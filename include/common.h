@@ -1,7 +1,16 @@
-#ifndef NPS_COMMON_DEFS
-#define NPS_COMMON_DEFS
+#ifndef NS_COMMON_H
+#define NS_COMMON_H
+
+#if defined(_MSC_VER)
+    #define WINDOWS
+#else
+    #define LINUX
+#endif
 
 #include <stdint.h>
+
+/* Preprocessor Directives */
+//{
 
 #define local static
 #define global static
@@ -14,5 +23,6 @@
 #define ArrayCount(Array) (sizeof(Array)/sizeof(Array[0]))
 
 #define Assert(Expression) if(!(Expression)) *(int *)0 = 0;
+//}
 
 #endif
