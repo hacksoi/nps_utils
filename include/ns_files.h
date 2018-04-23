@@ -3,17 +3,12 @@
 
 #include <stdlib.h>
 
-/* Structs */
-//{
 
 struct NsFile
 {
     FILE *file_pointer;
 };
-//}
 
-/* Functions */
-//{
 
 bool open(NpsFile *file, char *filename)
 {
@@ -76,6 +71,5 @@ int load(NpsFile *file, char *buffer, uint32_t buffer_size)
 
     return bytes_read;
 }
-//}
 
 #endif

@@ -1,13 +1,11 @@
 #ifndef NS_MATH_H
 #define NS_MATH_H
 
-#include "common.h"
+#include "ns_common.h"
 
 #include <math.h>
 #include <float.h>
 
-/* Globals */
-//{
 
 #ifndef M_PI
     #define M_PI 3.14159265358979323846f
@@ -21,10 +19,7 @@
 #define EXPANDV2(V) V.X, V.Y
 #define EXPANDV3(V) V.X, V.Y, V.Z
 #define EXPANDV4(V) V.X, V.Y, V.Z, V.W
-//}
 
-/* Structs */
-//{
 
 union v2
 {
@@ -177,10 +172,9 @@ struct tri2
 {
     v2 P1, P2, P3;
 };
-//}
+
 
 /* Misc */
-//{
 
 inline internal float
 ToRadians(float Degrees)
@@ -310,10 +304,8 @@ Max(float A, float B)
     float Result = A > B ? A : B;
     return Result;
 }
-//}
 
 /* Vectors */
-//{
 
 inline internal v2
 V2(float X, float Y)
@@ -628,7 +620,6 @@ GetRotationBetween(v3 A, v3 B)
 }
 
 /* Quaternions */
-//{
 
 inline internal quaternion
 Conjugate(quaternion Quat)
@@ -675,10 +666,8 @@ Rotate(v3 *Vector, v3 Axis, float RotationDegrees)
     quaternion RotQuat = {SinHalfAngle*Axis, CosHalfAngle};
     Rotate(Vector, RotQuat);
 }
-//}
 
 /* Matrices */
-//{
 
 inline float &
 mat4::operator[](int ElementIdx)
@@ -946,10 +935,8 @@ Invert(mat4 Matrix)
 
     return Result;
 }
-//}
 
 /* Rays */
-//{
 
 internal inline ray2
 ToRay2(line2 Line, bool NormalizeDir = true)
@@ -964,10 +951,8 @@ ToRay2(line2 Line, bool NormalizeDir = true)
     ray2 Result = {Pos, Dir};
     return Result;
 }
-//}
 
 /* Triangles */
-//{
 
 internal inline tri2
 TRI2(v2 P1, v2 P2, v2 P3)
@@ -999,10 +984,8 @@ GetSignedArea(v2 A, v2 B, v2 C)
     float Result = AxMinusCx*ByMinusCy - AyMinusCy*BxMinusCx;
     return Result;
 }
-//}
 
 /* Quads */
-//{
 
 inline v3
 quad2_3d::operator[](int CornerIdx)
@@ -1033,10 +1016,8 @@ GetPlaneCorners(plane Plane, float Size)
 
     return Result;
 }
-//}
 
 /* Rectangles */
-//{
 
 internal rect2
 RectFromPosSize(v2 Position, v2 Size)
@@ -1072,10 +1053,8 @@ GetSize(rect2 Rect)
     };
     return Result;
 }
-//}
 
 /* Lines */
-//{
 
 inline internal line2
 LINE2(v2 P1, v2 P2)
@@ -1164,10 +1143,8 @@ GetDistance(v2 P, line2 Line)
     float DistanceToLine = GetLength(P - ClosestPointOnLine);
     return DistanceToLine;
 }
-//}
 
 /* Intersections */
-//{
 
 internal inline bool
 CheckParallel(ray2 A, ray2 B)
@@ -1317,6 +1294,5 @@ DoesIntersect(line2 A, line2 B)
     bool Result = FindIntersection(A, B, 0);
     return Result;
 }
-//}
 
 #endif

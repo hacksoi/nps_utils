@@ -1,9 +1,10 @@
 #ifndef NS_STRING_H
 #define NS_STRING_H
 
-#include "common.h"
+#include "ns_common.h"
 
 #include <string.h>
+
 
 /* Checks for equality excluding null-terminators. */
 internal inline bool

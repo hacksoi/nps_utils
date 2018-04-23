@@ -1,8 +1,8 @@
 #ifndef NS_SHAPE_RENDERER_H
 #define NS_SHAPE_RENDERER_H
 
-#include "common.h"
-#include "opengl_functions.h"
+#include "ns_common.h"
+#include "ns_opengl_functions.h"
 
 #define SHAPE_RENDERER_CAPACITY_BYTES (1024*1024)
 

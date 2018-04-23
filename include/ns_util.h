@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
+
 /* Bits */
-//{
 
 uint32_t left_rotate(uint32_t value, int rots)
 {
@@ -18,10 +18,8 @@ uint32_t left_rotate(uint32_t value, int rots)
     uint32_t rotated_value = ((value << rots) | shifted_off_bits);
     return rotated_value;
 }
-//}
 
 /* Bytes */
-//{
 
 uint16_t get16be(uint8_t *src)
 {
@@ -60,10 +58,8 @@ void put64be(uint8_t *dest, uint64_t src)
     dest[6] = ((src & 0x000000000000ff00) >>  8);
     dest[7] = ((src & 0x00000000000000ff) >>  0);
 }
-//}
 
 /* Hex */
-//{
 
 inline internal int
 hex_to_int(char HexChar)
@@ -116,10 +112,8 @@ from_hex_color(char *HexString)
     Result[3] = 1.0f;
     return Result;
 }
-//}
 
 /* Base64 */
-//{
 
 inline char int_to_base64(int Value)
 {
@@ -150,6 +144,5 @@ inline char int_to_base64(int Value)
     }
     return Result;
 }
-//}
 
 #endif
