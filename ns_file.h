@@ -3,6 +3,11 @@
 
 #include "ns_common.h"
 
+#if defined(WINDOWS)
+#elif defined(LINUX)
+    #include <unistd.h>
+#endif
+
 #include <stdlib.h>
 
 
@@ -12,7 +17,17 @@ struct NsFile
 };
 
 
-bool ns_file_open(NsFile *file, char *filename)
+bool 
+ns_file_check_exists(char *filename)
+{
+#if defined(WINDOWS)
+#elif defined(LINUX)
+    return (access(filename, F_OK) != -1);
+#endif
+}
+
+int 
+ns_file_open(NsFile *file, char *filename)
 {
     file->internal_file = fopen(filename, "rb");
     if(file->internal_file == NULL)
@@ -23,7 +38,8 @@ bool ns_file_open(NsFile *file, char *filename)
     return NS_SUCCESS;
 }
 
-int ns_file_close(NsFile *file)
+int 
+ns_file_close(NsFile *file)
 {
     if(fclose(file->internal_file) == EOF)
     {
@@ -33,7 +49,8 @@ int ns_file_close(NsFile *file)
     return NS_SUCCESS;
 }
 
-int ns_file_get_filesize(NsFile *file)
+int 
+ns_file_get_filesize(NsFile *file)
 {
     FILE *internal_file = file->internal_file;
 
@@ -55,7 +72,8 @@ int ns_file_get_filesize(NsFile *file)
     return filesize;
 }
 
-int ns_file_load(NsFile *file, char *buffer, int buffer_size)
+int 
+ns_file_load(NsFile *file, char *buffer, int buffer_size)
 {
     int filesize = ns_file_get_filesize(file);
     if(buffer_size < filesize)

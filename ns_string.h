@@ -6,17 +6,32 @@
 #include <string.h>
 
 
+/* API */
+
+int
+ns_string_get_token(char *dst, char *src, int dst_size, char delimiter = ' ')
+{
+    int len = 0;
+    while(src[len] &&
+          src[len] != delimiter)
+    {
+        dst[len] = src[len];
+        len++;
+    }
+    return len;
+}
+
 /* Checks for equality excluding null-terminators. */
-internal inline bool
-string_equals_weak(char *String1, char *String2)
+inline bool
+ns_string_equals_weak(char *String1, char *String2)
 {
     for(; (*String1 && *String2) && (*String1 == *String2); String1++, String2++);
     return !*String2;
 }
 
 /* Checks if String1 contains String2. */
-internal inline bool
-string_contains(char *String1, char *String2)
+inline bool
+ns_string_contains(char *String1, char *String2)
 {
     if(!String1 || !String2)
     {
@@ -32,7 +47,7 @@ string_contains(char *String1, char *String2)
     char *String1End = String1 + strlen(String1);
     for(; (size_t)(String1End - String1) >= String2Length; String1++)
     {
-        if(StringEqualsWeak(String1, String2))
+        if(ns_string_equals_weak(String1, String2))
         {
             return true;
         }
@@ -41,8 +56,8 @@ string_contains(char *String1, char *String2)
     return false;
 }
 
-internal inline void
-reverse(char *String, int Length)
+inline void
+ns_reverse(char *String, int Length)
 {
     for(int i = 0; i < Length/2; i++)
     {
@@ -52,8 +67,8 @@ reverse(char *String, int Length)
     }
 }
 
-internal inline uint32_t
-convert_to_string(char *Dest, int Value)
+inline uint32_t
+ns_convert_to_string(char *Dest, int Value)
 {
     if(Value < 0)
     {
@@ -68,8 +83,9 @@ convert_to_string(char *Dest, int Value)
     }
     while(Value > 0);
 
-    Reverse(Dest, NumDigits);
+    ns_reverse(Dest, NumDigits);
 
     return NumDigits;
 }
+
 #endif

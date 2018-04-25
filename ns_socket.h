@@ -19,13 +19,13 @@
 
 
 #if defined(WINDOWS)
-    typedef SOCKET InternalSocket;
+    typedef SOCKET NsInternalSocket;
     #define NS_INVALID_SOCKET INVALID_SOCKET
     #define NS_SOCKET_ERROR SOCKET_ERROR
     #define NS_SOCKET_RDWR SD_BOTH
     #define DebugSocketPrintInfo() DebugPrintInfo(); fprintf(stderr, "    socket error code: %d", WSAGetLastError());
 #elif defined(LINUX)
-    typedef int InternalSocket;
+    typedef int NsInternalSocket;
     #define NS_INVALID_SOCKET -1
     #define NS_SOCKET_ERROR -1
     #define NS_SOCKET_RDWR SHUT_RDWR
@@ -37,7 +37,7 @@
 
 struct NsSocket
 {
-    InternalSocket internal_socket;
+    NsInternalSocket internal_socket;
 };
 
 
@@ -86,7 +86,7 @@ int ns_socket_create(NsSocket *ns_socket, const char *port, int backlog = 10)
 		return NS_ERROR;
 	}
 
-    InternalSocket internal_socket = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
+    NsInternalSocket internal_socket = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
     if(internal_socket == NS_INVALID_SOCKET)
     {
         DebugSocketPrintInfo();
@@ -123,8 +123,9 @@ int ns_socket_close(NsSocket *socket)
 {
 #if defined(WINDOWS)
 #elif defined(LINUX)
-    if(close(socket->internal_socket) == -1)
+    if(close(socket->internal_socket) == NS_SOCKET_ERROR)
     {
+        DebugSocketPrintInfo();
         return NS_ERROR;
     }
 #endif
@@ -133,7 +134,7 @@ int ns_socket_close(NsSocket *socket)
 
 int ns_socket_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t timeout_millis = 0, const char *name = NULL)
 {
-    InternalSocket internal_socket = ns_socket->internal_socket;
+    NsInternalSocket internal_socket = ns_socket->internal_socket;
 
     if(timeout_millis > 0)
     {
@@ -159,7 +160,7 @@ int ns_socket_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t 
 
     sockaddr_storage their_addr;
     socklen_t sin_size = sizeof(their_addr);
-    InternalSocket internal_client_socket = accept(internal_socket, (sockaddr *)&their_addr, &sin_size);
+    NsInternalSocket internal_client_socket = accept(internal_socket, (sockaddr *)&their_addr, &sin_size);
     if(internal_client_socket == NS_INVALID_SOCKET)
     {
         DebugSocketPrintInfo();
@@ -181,9 +182,9 @@ int ns_socket_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t 
 int ns_socket_send(NsSocket *socket, char *buffer, uint32_t buffer_size)
 {
     int bytes_sent = send(socket->internal_socket, buffer, buffer_size, 0);
-    if(bytes_sent == NS_SOCKET_ERROR)
+    if(bytes_sent <= 0)
     {
-        DebugPrintInfo();
+        DebugSocketPrintInfo();
         return NS_ERROR;
     }
     return bytes_sent;
@@ -200,7 +201,7 @@ int ns_socket_receive(NsSocket *socket, char *buffer, uint32_t buffer_size)
     int bytes_received = recv(socket->internal_socket, buffer, buffer_size, 0);
     if(bytes_received == NS_SOCKET_ERROR)
     {
-        DebugPrintInfo();
+        DebugSocketPrintInfo();
         return NS_ERROR;
     }
     return bytes_received;

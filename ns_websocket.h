@@ -1,6 +1,7 @@
 #if 0
 // TODO:
     -instead of making a thread per client (over 1000 threads?) keep a table of clients and iterate over them.
+    -destroy the message queue at some point
 #endif
 
 #ifndef NS_WEBSOCKETS_H
@@ -10,13 +11,20 @@
 #include "ns_util.h"
 #include "ns_sha1.h"
 #include "ns_message_queue.h"
-#include "ns_socket_wrapper.h"
+#include "ns_socket.h"
+#include "ns_thread_pool.h"
 
 #include <unistd.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include <sys/socket.h>
 
+
+#ifndef NS_SOCKET_MAX_CONNECTIONS
+    #define NS_SOCKET_MAX_CONNECTIONS 256
+#endif
+
+#define NS_WEBSOCKET_CLIENT_CLOSED -2
 
 #define NS_WEBSOCKET_KEY_HEADER "Sec-WebSocket-Key: "
 #define NS_WEBSOCKET_KEY_HEADER_LENGTH strlen(NS_WEBSOCKET_KEY_HEADER)
@@ -26,9 +34,7 @@
 #define NS_OPCODE_PONG 0x0A
 
 
-// TODO: sync this
-pthread_t ns_websocket_thread_pool[20];
-int ns_websocket_thread_pool_size;
+global NsThreadPool ns_websocket_background_client_thread_pool;
 
 
 /* Internal */
@@ -37,6 +43,7 @@ struct NsWebSocket
 {
     NsSocket socket;
     NsMessageQueue message_queue;
+    bool is_closed;
 };
 
 struct NsWebSocketFrame
@@ -58,8 +65,10 @@ int ns_websocket_destroy(NsWebSocket *websocket);
 int ns_websocket_get_client(NsWebSocket *websocket, NsWebSocket *client_websocket);
 int ns_websocket_receive(NsWebSocket *websocket, uint8_t *dest, uint32_t dest_size);
 int ns_websocket_send(NsWebSocket *websocket, uint8_t *message, uint32_t message_length);
+int ns_websocket_close(NsWebSocket *websocket);
 
-void ns_websocket_frame_print(NsWebSocketFrame frame)
+internal void 
+ns_websocket_frame_print(NsWebSocketFrame frame)
 {
     printf("fin: 0x%x, rsv1: 0x%x, rsv2: 0x%x, rsv3: 0x%x, opcode: 0x%x, mask: 0x%x, "
            "payload_length: %llu, mask[0]: 0x%x, mask[1]: 0x%x, mask[2]: 0x%x, mask[3]: 0x%x\n", 
@@ -67,7 +76,8 @@ void ns_websocket_frame_print(NsWebSocketFrame frame)
            frame.payload_length, frame.mask_key[0], frame.mask_key[1], frame.mask_key[2], frame.mask_key[3]);
 }
 
-NsWebSocketFrame ns_websocket_frame_inflate(uint8_t *raw_frame)
+internal NsWebSocketFrame 
+ns_websocket_frame_inflate(uint8_t *raw_frame)
 {
     NsWebSocketFrame frame;
     frame.fin = (raw_frame[0] & 0x80);
@@ -99,43 +109,27 @@ NsWebSocketFrame ns_websocket_frame_inflate(uint8_t *raw_frame)
     return frame;
 }
 
-int ns_websocket_init(NsWebSocket *websocket, NsSocket *socket)
+internal int 
+ns_websocket_init(NsWebSocket *websocket, NsSocket *socket)
 {
+    int status;
+
     websocket->socket = *socket;
-    if(ns_message_queue_create(&websocket->message_queue) == NS_ERROR)
+
+    status = ns_message_queue_create(&websocket->message_queue);
+    if(status != NS_SUCCESS)
     {
-        return NS_ERROR;
+        DebugPrintInfo();
+        return status;
     }
 
     return NS_SUCCESS;
 }
 
-int ns_websocket_send_close(NsWebSocket *websocket)
+internal void *
+ns_websocket_background_client_thread_entry(void *thread_data)
 {
-    NsSocket *socket = &websocket->socket;
-
-    uint8_t frame[2] = {};
-    int bytes_received;
-    {
-        // set fin bit
-        frame[0] |= 0x80;
-
-        // set opcode to close
-        frame[0] |= 0x08;
-
-        bytes_received = 2;
-    }
-
-    if(ns_socket_send(socket, frame, bytes_received) == NS_ERROR)
-    {
-        return NS_ERROR;
-    }
-
-    return NS_SUCCESS;
-}
-
-void *ns_websocket_background_client_thread_entry(void *thread_data)
-{
+    int status;
     NsWebSocket *websocket = (NsWebSocket *)thread_data;
     NsSocket *socket = &websocket->socket;
 
@@ -143,10 +137,15 @@ void *ns_websocket_background_client_thread_entry(void *thread_data)
     {
         uint8_t raw_frame[1024];
         int bytes_received = ns_socket_receive(socket, (char *)raw_frame, sizeof(raw_frame));
-        if(bytes_received < 0)
+        if(bytes_received <= 0)
         {
+            if(websocket->is_closed)
+            {
+                return (void *)NS_WEBSOCKET_CLIENT_CLOSED;
+            }
+
             DebugPrintInfo();
-            exit(1);
+            return (void *)bytes_received;
         }
 
         NsWebSocketFrame frame = ns_websocket_frame_inflate(raw_frame);
@@ -154,10 +153,11 @@ void *ns_websocket_background_client_thread_entry(void *thread_data)
         {
             case NS_OPCODE_CONNECTION_CLOSE:
             {
-                printf("received a close\n");
-                if(ns_websocket_send_close(websocket) == NS_ERROR)
+                status = ns_websocket_close(websocket);
+                if(status != NS_SUCCESS)
                 {
-                    return (void *)NS_ERROR;
+                    DebugPrintInfo();
+                    return (void *)status;
                 }
                 return NS_SUCCESS;
             } break;
@@ -178,7 +178,7 @@ void *ns_websocket_background_client_thread_entry(void *thread_data)
                     if(bytes_sent != bytes_received)
                     {
                         DebugPrintInfo();
-                        return NS_SUCCESS;
+                        return (void *)NS_ERROR;
                     }
                 }
             } break;
@@ -206,66 +206,108 @@ void *ns_websocket_background_client_thread_entry(void *thread_data)
 
 /* API */
 
-int ns_websocket_create(NsWebSocket *websocket, const char *port)
+int
+ns_websockets_init()
+{
+    int status;
+
+    status = ns_sockets_init();
+    if(status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        return status;
+    }
+
+    status = ns_thread_pool_create(&ns_websocket_background_client_thread_pool, 256);
+    if(status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        return status;
+    }
+
+    return NS_SUCCESS;
+}
+
+int 
+ns_websocket_create(NsWebSocket *websocket, const char *port)
 {
     NsSocket socket;
-    if(ns_socket_create(&socket, port) == NS_ERROR)
+    if(ns_socket_create(&socket, port) != NS_SUCCESS)
     {
+        DebugPrintInfo();
         return NS_ERROR;
     }
 
-    if(ns_websocket_init(websocket, &socket) == NS_ERROR)
+    if(ns_websocket_init(websocket, &socket) != NS_SUCCESS)
     {
+        DebugPrintInfo();
         return NS_ERROR;
     }
 
     return NS_SUCCESS;
 }
 
-int ns_websocket_close(NsWebSocket *websocket)
+int 
+ns_websocket_close(NsWebSocket *websocket)
 {
-    ns_websocket_send_close(websocket);
-
+    int status;
     NsSocket *socket = &websocket->socket;
 
-    // receive frames until we receive the close frame response
-    while(1)
+    websocket->is_closed = true;
+
+    // send close
     {
-        uint8_t frame[256];
-        if(ns_socket_receive(socket, frame, sizeof(frame)) == NS_ERROR)
+        uint8_t frame[2] = {};
+        int bytes_received;
         {
-            return NS_ERROR;
+            // set fin bit
+            frame[0] |= 0x80;
+
+            // set opcode to close
+            frame[0] |= 0x08;
+
+            bytes_received = 2;
         }
 
-        if((frame[0] & 0x0f) == 0x08)
+        status = ns_socket_send(socket, frame, bytes_received);
+        if(status <= 0)
         {
-            break;
+            DebugPrintInfo();
+            return status;
         }
     }
 
-    if(ns_socket_close(socket) == NS_ERROR)
+    status = ns_socket_close(&websocket->socket);
+    if(status != NS_SUCCESS)
     {
+        DebugPrintInfo();
         return NS_ERROR;
     }
 
     return NS_SUCCESS;
 }
 
-int ns_websocket_get_client(NsWebSocket *websocket, NsWebSocket *client_websocket)
+int 
+ns_websocket_get_client(NsWebSocket *websocket, NsWebSocket *client_websocket)
 {
+    int status;
+
     NsSocket client_socket;
-    if(ns_socket_get_client(&websocket->socket, &client_socket) == NS_ERROR)
+    status = ns_socket_get_client(&websocket->socket, &client_socket);
+    if(status != NS_SUCCESS)
     {
-        return NS_ERROR;
+        DebugPrintInfo();
+        return status;
     }
 
     char client_handshake[4096];
     int client_handshake_length = 0;
     {
         int client_handshake_length = ns_socket_receive(&client_socket, client_handshake, sizeof(client_handshake));
-        if(client_handshake_length == NS_ERROR)
+        if(client_handshake_length <= 0)
         {
-            return NS_ERROR;
+            DebugPrintInfo();
+            return client_handshake_length;
         }
 
         client_handshake[client_handshake_length] = 0;
@@ -302,9 +344,11 @@ int ns_websocket_get_client(NsWebSocket *websocket, NsWebSocket *client_websocke
 
             strcat(client_key, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
 
-            if(ns_sha1(client_key, reply_key) == NS_ERROR)
+            status = ns_sha1(client_key, reply_key);
+            if(status != NS_SUCCESS)
             {
-                return NS_ERROR;
+                DebugPrintInfo();
+                return status;
             }
         }
 
@@ -319,34 +363,47 @@ int ns_websocket_get_client(NsWebSocket *websocket, NsWebSocket *client_websocke
         client_handshake_reply[handshake_reply_length++] = 0;
     }
 
-    if(ns_socket_send(&client_socket, client_handshake_reply, strlen(client_handshake_reply)) == NS_ERROR) 
+    int bytes_sent = ns_socket_send(&client_socket, client_handshake_reply, strlen(client_handshake_reply));
+    if(bytes_sent <= 0) 
     {
-        return NS_ERROR;
+        DebugPrintInfo();
+        return bytes_sent;
     }
 
-    if(ns_websocket_init(client_websocket, &client_socket) == NS_ERROR)
+    status = ns_websocket_init(client_websocket, &client_socket);
+    if(status != NS_SUCCESS)
     {
-        return NS_ERROR;
+        DebugPrintInfo();
+        return status;
     }
 
-    pthread_create(&ns_websocket_thread_pool[ns_websocket_thread_pool_size++], NULL, ns_websocket_background_client_thread_entry, client_websocket);
+    status = ns_thread_pool_create_thread(&ns_websocket_background_client_thread_pool, 
+                                          ns_websocket_background_client_thread_entry, (void *)client_websocket);
+    if(status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        return status;
+    }
 
     return NS_SUCCESS;
 }
 
-int ns_websocket_receive(NsWebSocket *websocket, uint8_t *dest, uint32_t dest_size)
+int 
+ns_websocket_receive(NsWebSocket *websocket, uint8_t *dest, uint32_t dest_size)
 {
     int message_length = ns_message_queue_get(&websocket->message_queue, dest, dest_size);
     return message_length;
 }
 
-int ns_websocket_receive(NsWebSocket *websocket, char *dest, uint32_t dest_size)
+int 
+ns_websocket_receive(NsWebSocket *websocket, char *dest, uint32_t dest_size)
 {
     int message_length = ns_websocket_receive(websocket, (uint8_t *)dest, dest_size);
     return message_length;
 }
 
-int ns_websocket_send(NsWebSocket *websocket, uint8_t *message, uint32_t message_length)
+int 
+ns_websocket_send(NsWebSocket *websocket, uint8_t *message, uint32_t message_length)
 {
     NsSocket *socket = &websocket->socket;
 
@@ -382,15 +439,23 @@ int ns_websocket_send(NsWebSocket *websocket, uint8_t *message, uint32_t message
         bytes_received += message_length;
     }
 
-    if(ns_socket_send(socket, frame, bytes_received) == NS_SOCKET_ERROR)
+    int bytes_sent = ns_socket_send(socket, frame, bytes_received);
+    if(bytes_sent <= 0)
     {
+        if(websocket->is_closed)
+        {
+            return NS_WEBSOCKET_CLIENT_CLOSED;
+        }
+
+        DebugPrintInfo();
         return NS_ERROR;
     }
 
-    return NS_SUCCESS;
+    return bytes_sent;
 }
 
-int ns_websocket_send(NsWebSocket *websocket, char *message, uint32_t message_length)
+int 
+ns_websocket_send(NsWebSocket *websocket, char *message, uint32_t message_length)
 {
     int bytes_sent = ns_websocket_send(websocket, (uint8_t *)message, message_length);
     return bytes_sent;

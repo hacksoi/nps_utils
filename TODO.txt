@@ -1,0 +1,2 @@
+-instead of returning NS_ERROR, return the status code of the failed function call
+-abstract thread stuff away (ns_threads.h)

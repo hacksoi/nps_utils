@@ -47,7 +47,8 @@
 
 #define Assert(Expression) if(!(Expression)) *(int *)0 = 0;
 
-#define DebugPrintInfo() fprintf(stdout, "thread: %lu, %s line: %d\n", \
-                                 GetThread(), __PRETTY_FUNCTION__, __LINE__)
+// TODO: print stack trace instead. use backtrace() and addr2line.
+#define DebugPrintInfo() fprintf(stdout, "thread: %lu. %s %s line: %d\n", \
+                                 GetThread(), __FILE__, __PRETTY_FUNCTION__, __LINE__)
 
 #endif
