@@ -17,9 +17,6 @@
     typedef pthread_t NsInternalThread;
 #endif
 
-
-/* Internal */
-
 struct NsThread
 {
     NsInternalThread internal_thread;
@@ -29,9 +26,10 @@ struct NsThread
 
     void (*completion_callback)(NsThread *);
     void *extra_data_void_ptr;
-    int extra_data_int;
 };
 
+
+/* Internal */
 
 internal void *
 ns_thread_entry(void *input)
@@ -47,15 +45,16 @@ ns_thread_entry(void *input)
 }
 
 
-/* API */
-
 int
-ns_thread_create(NsThread *thread, void *(*thread_entry)(void *), void *thread_input)
+ns_thread_create(NsThread *thread, void *(*thread_entry)(void *), void *thread_input,
+                 void (*completion_callback)(NsThread *), void *extra_data_void_ptr)
 {
     int status;
 
     thread->entry = thread_entry;
     thread->input = thread_input;
+    thread->completion_callback = completion_callback;
+    thread->extra_data_void_ptr = extra_data_void_ptr;
 
 #if defined(WINDOWS)
 #elif defined(LINUX)
@@ -67,6 +66,15 @@ ns_thread_create(NsThread *thread, void *(*thread_entry)(void *), void *thread_i
     }
 #endif
     return NS_SUCCESS;
+}
+
+/* API */
+
+int
+ns_thread_create(NsThread *thread, void *(*thread_entry)(void *), void *thread_input)
+{
+    int status = ns_thread_create(thread, thread_entry, thread_input, NULL, NULL);
+    return status;
 }
 
 #endif

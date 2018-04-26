@@ -33,13 +33,16 @@
 #endif
 
 
-/* Internal */
-
 struct NsSocket
 {
     NsInternalSocket internal_socket;
+
+    void *(*completion_callback)(void *);
+    void *extra_data_void_ptr;
 };
 
+
+/* Internal */
 
 // get sockaddr, IPv4 or IPv6:
 void *ns_get_in_addr(struct sockaddr *sa)
@@ -52,23 +55,10 @@ void *ns_get_in_addr(struct sockaddr *sa)
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-/* API */
-
-int ns_sockets_init()
-{
-#if defined(WINDOWS)
-    WSADATA wsaData;
-    int iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
-    if (iResult != 0) {
-        printf("WSAStartup failed: %d\n", iResult);
-        return NS_ERROR;
-    }
-#elif defined(LINUX)
-#endif
-    return NS_SUCCESS;
-}
-
-int ns_socket_create(NsSocket *ns_socket, const char *port, int backlog = 10)
+/* For NsThreadPool. */
+int 
+ns_socket_listen(NsSocket *ns_socket, const char *port, int backlog, 
+                 void *(completion_callback)(NsSocket *), void *extra_data_void_ptr)
 {
     int status;
 
@@ -115,24 +105,55 @@ int ns_socket_create(NsSocket *ns_socket, const char *port, int backlog = 10)
 	}
 
     ns_socket->internal_socket = internal_socket;
+    ns_socket->completion_callback = completion_callback;
+    ns_socket->extra_data_void_ptr = extra_data_void_ptr;
 
     return NS_SUCCESS;
 }
 
-int ns_socket_close(NsSocket *socket)
+/* API */
+
+int 
+ns_sockets_init()
 {
 #if defined(WINDOWS)
+    WSADATA wsaData;
+    int iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+    if (iResult != 0) {
+        printf("WSAStartup failed: %d\n", iResult);
+        return NS_ERROR;
+    }
 #elif defined(LINUX)
+#endif
+    return NS_SUCCESS;
+}
+
+int 
+ns_socket_listen(NsSocket *ns_socket, const char *port, int backlog = 10)
+{
+    int status = ns_socket_listen(ns_socket, port, backlog, NULL, NULL);
+    return status;
+}
+
+int 
+ns_socket_close(NsSocket *socket)
+{
     if(close(socket->internal_socket) == NS_SOCKET_ERROR)
     {
         DebugSocketPrintInfo();
         return NS_ERROR;
     }
-#endif
+
+    if(socket->completion_callback != NULL)
+    {
+        socket->completion_callback(socket);
+    }
+
     return NS_SUCCESS;
 }
 
-int ns_socket_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t timeout_millis = 0, const char *name = NULL)
+int 
+ns_socket_accept(NsSocket *ns_socket, NsSocket *client_socket, uint32_t timeout_millis = 0, const char *name = NULL)
 {
     NsInternalSocket internal_socket = ns_socket->internal_socket;
 
@@ -179,7 +200,8 @@ int ns_socket_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t 
     return NS_SUCCESS;
 }
 
-int ns_socket_send(NsSocket *socket, char *buffer, uint32_t buffer_size)
+int 
+ns_socket_send(NsSocket *socket, char *buffer, uint32_t buffer_size)
 {
     int bytes_sent = send(socket->internal_socket, buffer, buffer_size, 0);
     if(bytes_sent <= 0)
@@ -190,13 +212,15 @@ int ns_socket_send(NsSocket *socket, char *buffer, uint32_t buffer_size)
     return bytes_sent;
 }
 
-int ns_socket_send(NsSocket *socket, uint8_t *buffer, uint32_t buffer_size)
+int 
+ns_socket_send(NsSocket *socket, uint8_t *buffer, uint32_t buffer_size)
 {
     int bytes_sent = ns_socket_send(socket, (char *)buffer, buffer_size);
     return bytes_sent;
 }
 
-int ns_socket_receive(NsSocket *socket, char *buffer, uint32_t buffer_size)
+int 
+ns_socket_receive(NsSocket *socket, char *buffer, uint32_t buffer_size)
 {
     int bytes_received = recv(socket->internal_socket, buffer, buffer_size, 0);
     if(bytes_received == NS_SOCKET_ERROR)
@@ -207,13 +231,15 @@ int ns_socket_receive(NsSocket *socket, char *buffer, uint32_t buffer_size)
     return bytes_received;
 }
 
-int ns_socket_receive(NsSocket *socket, uint8_t *buffer, uint32_t buffer_size)
+int 
+ns_socket_receive(NsSocket *socket, uint8_t *buffer, uint32_t buffer_size)
 {
     int bytes_received = ns_socket_receive(socket, (char *)buffer, buffer_size);
     return bytes_received;
 }
 
-int ns_socket_shutdown(NsSocket *socket, int how)
+int 
+ns_socket_shutdown(NsSocket *socket, int how)
 {
 #if defined(WINDOWS)
 #elif defined(LINUX)

@@ -15,32 +15,51 @@
 
 /* Internal */
 
-struct NsThreadPool
+/* API */
+
+struct NsThreadPoolThread
 {
-#if defined(WINDOWS)
-#elif defined(LINUX)
-    NsThread *threads;
-    NsMutex mutex;
-#endif
-    void *memory;
-    int capacity;
-    bool *statuses;
+    NsThread thread;
+    struct NsThreadPool *thread_pool; // Pointer to thread pool where this thread is from.
 };
 
+struct NsThreadPool
+{
+    NsThreadPoolThread *tp_threads;
+    NsMutex mutex;
+    void *memory;
+    int capacity;
+    bool *statuses; // We could place the status in the NsThreadPoolThread, but this is more cache friendly.
+};
+
+
+/* Internal */
 
 internal void
 ns_thread_pool_thread_completion_callback(NsThread *thread)
 {
     NsThreadPool *thread_pool = (NsThreadPool *)thread->extra_data_void_ptr;
-    int thread_idx = thread->extra_data_int;
+    NsThreadPoolThread *tp_threads = thread_pool->tp_threads;
+    bool *statuses = thread_pool->statuses;
+    int thread_pool_capacity = thread_pool->capacity;
 
-    // sanity check
-    if(!thread_pool->statuses[thread_idx])
+    int tp_thread_idx = 0;
+    for(; tp_thread_idx < thread_pool_capacity; tp_thread_idx++)
     {
-        DebugPrintInfo();
+        if(thread == &tp_threads[tp_thread_idx].thread)
+        {
+            break;
+        }
     }
 
-    thread_pool->statuses[thread_idx] = false;
+    // sanity check
+    if(!statuses[tp_thread_idx])
+    {
+        DebugPrintInfo();
+        return;
+    }
+
+    statuses[tp_thread_idx] = false;
 }
 
 /* API */
@@ -50,7 +69,7 @@ ns_thread_pool_create(NsThreadPool *thread_pool, int capacity)
 {
     int status;
 
-    uint32_t threads_size = (capacity*sizeof(NsThread));
+    uint32_t threads_size = (capacity*sizeof(NsThreadPoolThread));
     uint32_t statuses_size = (capacity*sizeof(bool));
     uint8_t *memory = (uint8_t *)malloc(threads_size + statuses_size);
     if(memory == NULL)
@@ -59,9 +78,15 @@ ns_thread_pool_create(NsThreadPool *thread_pool, int capacity)
         return NS_ERROR;
     }
 
-    thread_pool->threads = (NsThread *)memory;
+    thread_pool->tp_threads = (NsThreadPoolThread *)memory;
     thread_pool->statuses = (bool *)(memory + threads_size);
     thread_pool->capacity = capacity;
+
+    NsThreadPoolThread *tp_threads = thread_pool->tp_threads;
+    for(int i = 0; i < capacity; i++)
+    {
+        tp_threads[i].thread_pool = thread_pool;
+    }
 
     status = ns_mutex_create(&thread_pool->mutex);
     if(status != NS_SUCCESS)
@@ -76,59 +101,50 @@ ns_thread_pool_create(NsThreadPool *thread_pool, int capacity)
 int
 ns_thread_pool_destroy(NsThreadPool *thread_pool)
 {
-    free(thread_pool->threads);
+    free(thread_pool->tp_threads);
     return NS_SUCCESS;
 }
 
 int
-ns_thread_pool_get(NsThreadPool *thread_pool, NsThread **thread_ptr)
+ns_thread_pool_thread_get(NsThreadPool *thread_pool, NsThreadPoolThread **tp_thread_ptr)
 {
     ns_mutex_lock(&thread_pool->mutex);
 
-    NsThread *thread;
-    bool *statuses = thread_pool->statuses;
+    NsThreadPoolThread *tp_thread = NULL;
     int thread_pool_capacity = thread_pool->capacity;
-    int thread_idx = 0;
-    for(; thread_idx < thread_pool_capacity; thread_idx++)
+    bool *statuses = thread_pool->statuses;
+    int tp_thread_idx = 0;
+    for(; tp_thread_idx < thread_pool_capacity; tp_thread_idx++)
     {
-        if(!statuses[thread_idx])
+        if(!statuses[tp_thread_idx])
         {
-            thread = &thread_pool->threads[thread_idx];
-            statuses[thread_idx] = true;
+            tp_thread = &thread_pool->tp_threads[tp_thread_idx];
+            statuses[tp_thread_idx] = true;
             break;
         }
     }
 
     ns_mutex_unlock(&thread_pool->mutex);
 
-    if(thread_idx == thread_pool_capacity)
+    if(tp_thread_idx == thread_pool_capacity)
     {
         DebugPrintInfo();
         return NS_ERROR;
     }
 
-    thread->extra_data_void_ptr = thread_pool;
-    thread->extra_data_int = thread_idx;
-    thread->completion_callback = ns_thread_pool_thread_completion_callback;
-    *thread_ptr = thread;
+    *tp_thread_ptr = tp_thread;
 
     return NS_SUCCESS;
 }
 
 int
-ns_thread_pool_create_thread(NsThreadPool *thread_pool, void *(*thread_entry)(void *), void *thread_input)
+ns_thread_pool_thread_create(NsThreadPoolThread *tp_thread, 
+                             void *(*thread_entry)(void *), void *thread_input)
 {
     int status;
 
-    NsThread *thread;
-    status = ns_thread_pool_get(thread_pool, &thread);
-    if(status != NS_SUCCESS)
-    {
-        DebugPrintInfo();
-        return NS_ERROR;
-    }
-
-    status = ns_thread_create(thread, thread_entry, thread_input);
+    status = ns_thread_create(&tp_thread->thread, thread_entry, thread_input, 
+                              ns_thread_pool_thread_completion_callback, tp_thread->thread_pool);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();

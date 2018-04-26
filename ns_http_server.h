@@ -1,16 +1,19 @@
 #ifndef NS_HTTP_SERVER_H
 #define NS_HTTP_SERVER_H
 
-
 #include "ns_common.h"
 #include "ns_socket.h"
 #include "ns_thread.h"
 #include "ns_file.h"
 #include "ns_string.h"
+#include "ns_socket_pool.h"
 
 
 global NsThreadPool ns_http_server_thread_pool;
+global NsSocketPool ns_http_server_socket_pool;
 
+
+/* Internal */
 
 struct NsHttpServer
 {
@@ -18,8 +21,6 @@ struct NsHttpServer
     const char *port;
 };
 
-
-/* Internal */
 
 internal void *
 ns_http_server_client_thread_entry(void *thread_input)
@@ -112,7 +113,7 @@ ns_http_server_client_getter_thread_entry(void *thread_input)
     NsHttpServer *http_server = (NsHttpServer *)thread_input;
 
     NsSocket socket;
-    status = ns_socket_create(&socket, http_server->port);
+    status = ns_socket_listen(&socket, http_server->port);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
@@ -121,17 +122,16 @@ ns_http_server_client_getter_thread_entry(void *thread_input)
 
 	printf("http server: waiting for connections...\n");
 
-    NsSocket client_socket[];
     while(1)
     {
+        ns_socket_pool_socket_get(&socket_pool, &socket, &client_socket, 0, "http server");
+
         status = ns_socket_get_client(&socket, &client_socket, 0, "http server");
         if(status != NS_SUCCESS)
         {
             DebugPrintInfo();
             return (void *)status;
         }
-
-        ns_socket_pool_get_client(&socket_pool, &socket, &client_socket, 0, "http server");
 
         status = ns_thread_pool_create_thread(&ns_http_server_thread_pool, 
                                               ns_http_server_client_thread_entry, (void *)client_socket);
@@ -152,6 +152,13 @@ ns_http_server_create(NsHttpServer *http_server, int max_connections, const char
     int status;
 
     status = ns_thread_pool_create(&ns_http_server_thread_pool, max_connections);
+    if(status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        return status;
+    }
+
+    status = ns_socket_pool_create(&ns_http_server_socket_pool, max_connections);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();

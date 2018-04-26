@@ -229,10 +229,10 @@ ns_websockets_init()
 }
 
 int 
-ns_websocket_create(NsWebSocket *websocket, const char *port)
+ns_websocket_listen(NsWebSocket *websocket, const char *port)
 {
     NsSocket socket;
-    if(ns_socket_create(&socket, port) != NS_SUCCESS)
+    if(ns_socket_listen(&socket, port) != NS_SUCCESS)
     {
         DebugPrintInfo();
         return NS_ERROR;
@@ -293,7 +293,7 @@ ns_websocket_get_client(NsWebSocket *websocket, NsWebSocket *client_websocket)
     int status;
 
     NsSocket client_socket;
-    status = ns_socket_get_client(&websocket->socket, &client_socket);
+    status = ns_socket_accept(&websocket->socket, &client_socket);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
@@ -377,8 +377,16 @@ ns_websocket_get_client(NsWebSocket *websocket, NsWebSocket *client_websocket)
         return status;
     }
 
-    status = ns_thread_pool_create_thread(&ns_websocket_background_client_thread_pool, 
-                                          ns_websocket_background_client_thread_entry, (void *)client_websocket);
+    NsThreadPoolThread *tp_thread;
+    status = ns_thread_pool_thread_get(&ns_websocket_background_client_thread_pool, &tp_thread);
+    if(status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        return status;
+    }
+
+    status = ns_thread_pool_thread_create(tp_thread, ns_websocket_background_client_thread_entry, 
+                                          (void *)client_websocket);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
