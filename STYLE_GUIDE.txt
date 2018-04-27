@@ -5,3 +5,5 @@ Prepend all functions, structs/classes, and macros with ns/Ns/NS.
 
         Argument: If there are conflicts, isn't it the user's fault for having two methods in his codebase for doing the same thing? For example, if he is getting conflicts with our string library, shouldn't he just get rid of his own string library?
         Rebuttal: No, because perhaps the user just wanted the socket library, but the socket library also required our string library, which the user does not necessarily want.
+
+Never use malloc(). Just use a static global array with #define, and allow user to change #define above.

@@ -1,0 +1,2 @@
+vim macro for boilerplate status check:
+    istatus = oif(){}kk$istatus != NS_SCUCCESSjoDebugPrintInfo();return stauts€kb€kb€kbtus;

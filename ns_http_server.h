@@ -7,20 +7,19 @@
 #include "ns_file.h"
 #include "ns_string.h"
 #include "ns_socket_pool.h"
+#include "ns_worker_threads.h"
 
-
-global NsThreadPool ns_http_server_thread_pool;
-global NsSocketPool ns_http_server_socket_pool;
-
-
-/* Internal */
 
 struct NsHttpServer
 {
+    NsWebSocketContext ws_context;
     int max_connections;
     const char *port;
+    NsWorkerThreads worker_threads;
 };
 
+
+/* Internal */
 
 internal void *
 ns_http_server_client_thread_entry(void *thread_input)
@@ -30,7 +29,7 @@ ns_http_server_client_thread_entry(void *thread_input)
 
     while(1)
     {
-        char buf[1024];
+        char buf[1024]; // TODO: len?
         int bytes_received = ns_socket_receive(socket, buf, sizeof(buf));
         if(bytes_received <= 0)
         {
@@ -38,7 +37,7 @@ ns_http_server_client_thread_entry(void *thread_input)
             exit(1);
         }
 
-        char token[256];
+        char token[256]; // TODO: len?
 
         // request
         int len = ns_string_get_token(token, buf, sizeof(token), ' ');
@@ -61,7 +60,7 @@ ns_http_server_client_thread_entry(void *thread_input)
             char *resource_filename = !strcmp(token, "/") ? (char *)"index.html" : token;
             if(ns_file_check_exists(resource_filename))
             {
-                char resource[Kilobytes(4)];
+                char resource[Kilobytes(4)]; // TODO: len?
                 int resource_size;
                 {
                     NsFile file;
@@ -151,7 +150,7 @@ ns_http_server_create(NsHttpServer *http_server, int max_connections, const char
 {
     int status;
 
-    status = ns_thread_pool_create(&ns_http_server_thread_pool, max_connections);
+    status = ns_worker_threads_create(&http_server->worker_threads, max_connections);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
@@ -168,8 +167,8 @@ ns_http_server_create(NsHttpServer *http_server, int max_connections, const char
     http_server->max_connections = max_connections;
     http_server->port = port;
 
-    status = ns_thread_pool_create_thread(&ns_http_server_thread_pool, 
-                                          ns_http_server_client_getter_thread_entry, http_server);
+    status = ns_worker_threads_add_work(&ns_http_server_thread_pool, 
+                                        ns_http_server_client_getter_thread_entry, http_server);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();

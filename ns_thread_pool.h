@@ -1,3 +1,8 @@
+#if 0
+currently, there's still a problem with the fact that the user can call ns_thread_pool_thread_create() on a thread that's already finished executing, therefore causing the pool to not keep track.
+#endif
+
+#if 0
 #ifndef NS_THREAD_POOL_H
 #define NS_THREAD_POOL_H
 
@@ -154,4 +159,5 @@ ns_thread_pool_thread_create(NsThreadPoolThread *tp_thread,
     return NS_SUCCESS;
 }
 
+#endif
 #endif

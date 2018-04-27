@@ -1,7 +1,11 @@
 #if 0
-// TODO:
-    -instead of making a thread per client (over 1000 threads?) keep a table of clients and iterate over them.
-    -destroy the message queue at some point
+all right, this is how it's gonna go down...
+    -for where to store messages:
+        -full out memory allocator. this is for storing messages.
+        -NsWebSocket will have an array of (uint8_t *), each of which point to one of the messages in the memory allocator.
+    -for threads:
+        -single thread. use select() with multiple socket fds in the read fd_set.
+        -we need to keep a list of actively used sockets. socket() and close() are good chokepoints.
 #endif
 
 #ifndef NS_WEBSOCKETS_H
@@ -20,8 +24,8 @@
 #include <sys/socket.h>
 
 
-#ifndef NS_SOCKET_MAX_CONNECTIONS
-    #define NS_SOCKET_MAX_CONNECTIONS 256
+#ifndef NS_MAX_SOCKET_CONNECTIONS
+    #define NS_MAX_SOCKET_CONNECTIONS 1024
 #endif
 
 #define NS_WEBSOCKET_CLIENT_CLOSED -2
@@ -33,11 +37,6 @@
 #define NS_OPCODE_PING 0x09
 #define NS_OPCODE_PONG 0x0A
 
-
-global NsThreadPool ns_websocket_background_client_thread_pool;
-
-
-/* Internal */
 
 struct NsWebSocket
 {
@@ -60,12 +59,18 @@ struct NsWebSocketFrame
 };
 
 
+global int ns_websocket_fd_set[NS_MAX_SOCKET_CONNECTIONS];
+
+
 int ns_websocket_create(NsWebSocket *websocket, const char *port);
 int ns_websocket_destroy(NsWebSocket *websocket);
 int ns_websocket_get_client(NsWebSocket *websocket, NsWebSocket *client_websocket);
 int ns_websocket_receive(NsWebSocket *websocket, uint8_t *dest, uint32_t dest_size);
 int ns_websocket_send(NsWebSocket *websocket, uint8_t *message, uint32_t message_length);
 int ns_websocket_close(NsWebSocket *websocket);
+
+
+/* Internal */
 
 internal void 
 ns_websocket_frame_print(NsWebSocketFrame frame)
@@ -207,18 +212,18 @@ ns_websocket_background_client_thread_entry(void *thread_data)
 /* API */
 
 int
-ns_websockets_init()
+ns_websockets_startup()
 {
     int status;
 
-    status = ns_sockets_init();
+    status = ns_sockets_start();
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
         return status;
     }
 
-    status = ns_thread_pool_create(&ns_websocket_background_client_thread_pool, 256);
+    status = ns_worker_threads_create(&ns_websocket_worker_threads, NS_MAX_SOCKET_CONNECTIONS);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
@@ -377,16 +382,8 @@ ns_websocket_get_client(NsWebSocket *websocket, NsWebSocket *client_websocket)
         return status;
     }
 
-    NsThreadPoolThread *tp_thread;
-    status = ns_thread_pool_thread_get(&ns_websocket_background_client_thread_pool, &tp_thread);
-    if(status != NS_SUCCESS)
-    {
-        DebugPrintInfo();
-        return status;
-    }
-
-    status = ns_thread_pool_thread_create(tp_thread, ns_websocket_background_client_thread_entry, 
-                                          (void *)client_websocket);
+    status = ns_worker_threads_add_work(&ns_websocket_worker_threads,
+                                        ns_websocket_background_client_thread_entry, (void *)client_websocket);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
