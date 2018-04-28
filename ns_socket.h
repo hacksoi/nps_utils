@@ -114,7 +114,7 @@ ns_socket_listen(NsSocket *ns_socket, const char *port, int backlog,
 /* API */
 
 int 
-ns_sockets_init()
+ns_sockets_startup()
 {
 #if defined(WINDOWS)
     WSADATA wsaData;

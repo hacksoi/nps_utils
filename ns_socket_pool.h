@@ -3,6 +3,7 @@
 
 #include "ns_common.h"
 #include "ns_socket.h"
+#include "ns_memory.h"
 
 
 struct NsSocketPoolSocket
@@ -59,7 +60,7 @@ ns_socket_pool_create(NsSocketPool *socket_pool, int capacity)
 
     uint32_t sockets_size = (capacity*sizeof(NsSocketPoolSocket));
     uint32_t statuses_size = (capacity*sizeof(bool));
-    uint8_t *memory = (uint8_t *)malloc(sockets_size + statuses_size);
+    uint8_t *memory = (uint8_t *)ns_memory_allocate(sockets_size + statuses_size);
     if(memory == NULL)
     {
         DebugPrintInfo();
@@ -89,14 +90,19 @@ ns_socket_pool_create(NsSocketPool *socket_pool, int capacity)
 int
 ns_socket_pool_destroy(NsSocketPool *socket_pool)
 {
-    free(socket_pool->sp_sockets);
+    ns_memory_free(socket_pool->sp_sockets);
     return NS_SUCCESS;
 }
 
 int
 ns_socket_pool_socket_get(NsSocketPool *socket_pool, NsSocketPoolSocket **sp_socket_ptr)
 {
-    ns_mutex_lock(&socket_pool->mutex);
+    status = ns_mutex_lock(&socket_pool->mutex);
+    if(status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        return status;
+    }
 
     NsSocketPoolSocket *sp_socket = NULL;
     int socket_pool_capacity = socket_pool->capacity;
@@ -112,7 +118,12 @@ ns_socket_pool_socket_get(NsSocketPool *socket_pool, NsSocketPoolSocket **sp_soc
         }
     }
 
-    ns_mutex_unlock(&socket_pool->mutex);
+    status = ns_mutex_unlock(&socket_pool->mutex);
+    if(status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        return status;
+    }
 
     if(sp_socket_idx == socket_pool_capacity)
     {

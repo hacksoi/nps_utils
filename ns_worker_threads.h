@@ -4,6 +4,7 @@
 #include "ns_common.h"
 #include "ns_thread.h"
 #include "ns_math.h"
+#include "ns_memory.h"
 
 #include <stdlib.h>
 
@@ -50,7 +51,14 @@ ns_worker_threads_create(NsWorkerThreads *worker_threads, int max_threads, int m
 {
     int status;
 
-    NsThreads *threads = (NsThread *)malloc(sizeof(NsThread)*max_threads);
+    status = ns_work_queue_create(&worker_threads->work_queue);
+    if(status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        return status;
+    }
+
+    NsThreads *threads = (NsThread *)ns_memory_allocate(sizeof(NsThread)*max_threads);
     if(threads == NULL)
     {
         DebugPrintInfo();
@@ -78,7 +86,7 @@ ns_worker_threads_destroy(NsWorkerThreads *worker_threads)
 {
     int status;
 
-    free(worker_threads->threads);
+    ns_memory_free(worker_threads->threads);
 
     status = ns_work_queue_destroy(&worker_threads->work_queue);
     if(status != NS_SUCCESS)
@@ -94,6 +102,8 @@ int
 ns_worker_threads_add_work(NsWorkerThreads *worker_threads, 
                            int (*thread_entry)(void *), void *work)
 {
+    int status;
+
     status = ns_work_queue_add(&worker_threads->work_queue, thread_entry, work);
     if(status != NS_SUCCESS)
     {

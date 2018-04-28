@@ -12,7 +12,6 @@
 
 struct NsHttpServer
 {
-    NsWebSocketContext ws_context;
     int max_connections;
     const char *port;
     NsWorkerThreads worker_threads;
@@ -106,6 +105,11 @@ ns_http_server_client_thread_entry(void *thread_input)
 }
 
 internal void *
+ns_http_server_client_receiver_thread_entry(void *thread_input)
+{
+}
+
+internal void *
 ns_http_server_client_getter_thread_entry(void *thread_input)
 {
     int status;
@@ -123,7 +127,12 @@ ns_http_server_client_getter_thread_entry(void *thread_input)
 
     while(1)
     {
-        ns_socket_pool_socket_get(&socket_pool, &socket, &client_socket, 0, "http server");
+        status = ns_socket_pool_socket_get(&socket_pool, &socket, &client_socket, 0, "http server");
+        if(status != NS_SUCCESS)
+        {
+            DebugPrintInfo();
+            return status;
+        }
 
         status = ns_socket_get_client(&socket, &client_socket, 0, "http server");
         if(status != NS_SUCCESS)
@@ -131,6 +140,8 @@ ns_http_server_client_getter_thread_entry(void *thread_input)
             DebugPrintInfo();
             return (void *)status;
         }
+
+        // add client to pollfds
 
         status = ns_thread_pool_create_thread(&ns_http_server_thread_pool, 
                                               ns_http_server_client_thread_entry, (void *)client_socket);

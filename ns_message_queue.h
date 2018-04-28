@@ -235,18 +235,25 @@ int ns_message_queue_get(NsMessageQueue *message_queue,
                          uint8_t *dest, uint32_t dest_size, 
                          bool is_blocking = true)
 {
+    int status;
+
     if(is_blocking)
     {
-        if(ns_semaphore_get(&message_queue->read_write_semaphore) == NS_ERROR)
+        status = ns_semaphore_get(&message_queue->read_write_semaphore);
+        if(status != NS_SUCCESS)
+        {
+            DebugPrintInfo();
+            return status;
+        }
+    }
+    else 
+    {
+        status = ns_message_queue_check_empty(message_queue);
+        if(status != NS_SUCCESS)
         {
             DebugPrintInfo();
             return NS_ERROR;
         }
-    }
-    else if(ns_message_queue_check_empty(message_queue))
-    {
-        DebugPrintInfo();
-        return -1;
     }
 
     const uint8_t *tail = message_queue->tail;
@@ -329,6 +336,14 @@ int ns_message_queue_get(NsMessageQueue *message_queue,
             }
 
             *(uint32_t *)head = message_left;
+
+            // also, we didn't completely remove the message, so increment the semaphore
+            status = ns_semaphore_put(&message_queue->read_write_semaphore);
+            if(status != NS_SUCCESS)
+            {
+                DebugPrintInfo();
+                return status;
+            }
         }
     }
     message_queue->head = head;

@@ -5,6 +5,7 @@
 
 #include "ns_mutex.h"
 #include "ns_semaphore.h"
+#include "ns_memory.h"
 
 
 struct NsWork
@@ -75,7 +76,7 @@ ns_work_queue_create(NsWorkQueue *work_queue, int max_work)
         return status;
     }
 
-    NsWork *work = (NsWork *)malloc(sizeof(NsWork)*max_work);
+    NsWork *work = (NsWork *)ns_memory_allocate(sizeof(NsWork)*max_work);
     if(work == NULL)
     {
         DebugPrintInfo();
@@ -95,7 +96,7 @@ ns_work_queue_destroy(NsWorkQueue *work_queue)
 {
     int status;
 
-    free(work_queue->start);
+    ns_memory_free(work_queue->start);
 
     status = ns_semaphore_destroy(&work_queue->semaphore);
     if(status != NS_SUCCESS)
