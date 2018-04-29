@@ -42,6 +42,23 @@ ns_mutex_create(NsMutex *mutex)
     return NS_SUCCESS;
 }
 
+int
+ns_mutex_destroy(NsMutex *mutex)
+{
+    int status;
+
+#if defined(WINDOWS)
+#elif defined(LINUX)
+    status = pthread_mutex_destroy(&mutex->internal_mutex);
+    if(status != 0)
+    {
+        DebugPrintInfo();
+        return status;
+    }
+#endif
+    return NS_SUCCESS;
+}
+
 int 
 ns_mutex_lock(NsMutex *mutex)
 {

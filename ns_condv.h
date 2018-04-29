@@ -11,7 +11,7 @@
 
 #if defined(WINDOWS)
 #elif defined(LINUX)
-    typedef InternalCondv pthread_cond_t;
+    typedef pthread_cond_t InternalCondv;
 #endif
 
 struct NsCondv

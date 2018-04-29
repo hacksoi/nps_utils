@@ -1,55 +1,34 @@
+#if 0
+TODO: use a free list
+#endif
+
 #ifndef NS_SOCKET_POOL_H
 #define NS_SOCKET_POOL_H
 
 #include "ns_common.h"
 #include "ns_socket.h"
 #include "ns_memory.h"
+#include "ns_mutex.h"
 
 
 struct NsSocketPoolSocket
 {
     NsSocket socket;
-    struct NsSocketPool *socket_pool; // Points to socket pool where this sp_socket came from.
+    NsSocketPoolSocket *next;
+    NsSocketPoolSocket *prev;
 };
 
 struct NsSocketPool
 {
     NsMutex mutex;
-    void *memory;
     NsSocketPoolSocket *sp_sockets;
-    bool *statuses; // We could place the status in the NsSocketPoolSocket, but this is more cache friendly.
-    int capacity;
+    NsSocketPoolSocket *free_list_head;
+
+    int offset_from_socket_to_pool_socket;
 };
 
 
 /* Internal */
-
-internal void
-ns_socket_pool_socket_close_callback(NsSocket *socket)
-{
-    NsSocketPool *socket_pool = (NsSocketPool *)socket->extra_data_void_ptr;
-    NsSocketPoolSocket *sp_sockets = socket_pool->sp_sockets;
-    bool *statuses = socket_pool->statuses;
-    int socket_pool_capacity = socket_pool->capacity;
-
-    int sp_socket_idx = 0;
-    for(; sp_socket_idx < socket_pool_capacity; sp_socket_idx++)
-    {
-        if(socket == &sp_sockets[sp_socket_idx].socket)
-        {
-            break;
-        }
-    }
-
-    // sanity check
-    if(!statuses[sp_socket_idx])
-    {
-        DebugPrintInfo();
-        return;
-    }
-
-    statuses[sp_socket_idx] = false;
-}
 
 /* API */
 
@@ -58,24 +37,15 @@ ns_socket_pool_create(NsSocketPool *socket_pool, int capacity)
 {
     int status;
 
-    uint32_t sockets_size = (capacity*sizeof(NsSocketPoolSocket));
-    uint32_t statuses_size = (capacity*sizeof(bool));
-    uint8_t *memory = (uint8_t *)ns_memory_allocate(sockets_size + statuses_size);
-    if(memory == NULL)
+    NsSocketPoolSocket *sp_sockets = (NsSocketPoolSocket *)ns_memory_allocate(sizeof(NsSocketPoolSocket)*capacity);
+    if(sp_sockets == NULL)
     {
         DebugPrintInfo();
         return NS_ERROR;
     }
 
-    socket_pool->sp_sockets = (NsSocketPoolSocket *)memory;
-    socket_pool->statuses = (bool *)(memory + sockets_size);
-    socket_pool->capacity = capacity;
-
-    NsSocketPoolSocket *sp_sockets = socket_pool->sp_sockets;
-    for(int i = 0; i < capacity; i++)
-    {
-        sp_sockets[i].socket_pool = socket_pool;
-    }
+    socket_pool->sp_sockets = sp_sockets;
+    socket_pool->free_list_head = sp_sockets;
 
     status = ns_mutex_create(&socket_pool->mutex);
     if(status != NS_SUCCESS)
@@ -84,19 +54,47 @@ ns_socket_pool_create(NsSocketPool *socket_pool, int capacity)
         return status;
     }
 
+    // setup free list
+    for(int i = 0; i < (capacity - 1); i++)
+    {
+        sp_sockets[i].next = &sp_sockets[i + 1];
+    }
+
+    NsSocketPoolSocket *sp_socket = &sp_sockets[0];
+    socket_pool->offset_from_socket_to_pool_socket = (int)((uint8_t *)sp_socket - (uint8_t *)&sp_socket->socket);
+
     return NS_SUCCESS;
 }
 
 int
 ns_socket_pool_destroy(NsSocketPool *socket_pool)
 {
+    int status;
+
     ns_memory_free(socket_pool->sp_sockets);
+
+    status = ns_mutex_destroy(&socket_pool->mutex);
+    if(status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        return status;
+    }
+
     return NS_SUCCESS;
 }
 
 int
-ns_socket_pool_socket_get(NsSocketPool *socket_pool, NsSocketPoolSocket **sp_socket_ptr)
+ns_socket_pool_get(NsSocketPool *socket_pool, NsSocket **socket_ptr)
 {
+    int status;
+
+    NsSocketPoolSocket *free = socket_pool->free_list_head;
+    if(free == NULL)
+    {
+        DebugPrintInfo();
+        return NS_ERROR;
+    }
+
     status = ns_mutex_lock(&socket_pool->mutex);
     if(status != NS_SUCCESS)
     {
@@ -104,19 +102,8 @@ ns_socket_pool_socket_get(NsSocketPool *socket_pool, NsSocketPoolSocket **sp_soc
         return status;
     }
 
-    NsSocketPoolSocket *sp_socket = NULL;
-    int socket_pool_capacity = socket_pool->capacity;
-    bool *statuses = socket_pool->statuses;
-    int sp_socket_idx = 0;
-    for(; sp_socket_idx < socket_pool_capacity; sp_socket_idx++)
-    {
-        if(!statuses[sp_socket_idx])
-        {
-            sp_socket = &socket_pool->sp_sockets[sp_socket_idx];
-            statuses[sp_socket_idx] = true;
-            break;
-        }
-    }
+    // remove from free list
+    socket_pool->free_list_head = free->next;
 
     status = ns_mutex_unlock(&socket_pool->mutex);
     if(status != NS_SUCCESS)
@@ -125,28 +112,34 @@ ns_socket_pool_socket_get(NsSocketPool *socket_pool, NsSocketPoolSocket **sp_soc
         return status;
     }
 
-    if(sp_socket_idx == socket_pool_capacity)
-    {
-        DebugPrintInfo();
-        return NS_ERROR;
-    }
-
-    *sp_socket_ptr = sp_socket;
+    *socket_ptr = &free->socket;
 
     return NS_SUCCESS;
 }
 
 int
-ns_socket_pool_socket_listen(NsSocketPoolSocket *sp_socket, const char *port, int backlog = 10)
+ns_socket_pool_release(NsSocketPool *socket_pool, NsSocket *socket)
 {
     int status;
 
-    status = ns_socket_listen(&sp_socket->socket, port, backlog, 
-                              ns_socket_pool_socket_close_callback, sp_socket->socket_pool);
+    status = ns_mutex_lock(&socket_pool->mutex);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
-        return NS_ERROR;
+        return status;
+    }
+
+    NsSocketPoolSocket *sp_socket = (NsSocketPoolSocket *)((uint8_t *)socket + socket_pool->offset_from_socket_to_pool_socket);
+
+    // add to free list
+    sp_socket->next = socket_pool->free_list_head;
+    socket_pool->free_list_head = sp_socket;
+
+    status = ns_mutex_unlock(&socket_pool->mutex);
+    if(status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        return status;
     }
 
     return NS_SUCCESS;

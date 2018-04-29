@@ -18,6 +18,7 @@ ns_string_get_token(char *dst, char *src, int dst_size, char delimiter = ' ')
         dst[len] = src[len];
         len++;
     }
+    dst[len] = 0;
     return len;
 }
 

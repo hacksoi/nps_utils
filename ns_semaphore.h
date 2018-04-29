@@ -34,6 +34,18 @@ int ns_semaphore_create(NsSemaphore *semaphore, int initial_value = 0)
     return NS_SUCCESS;
 }
 
+int ns_semaphore_destroy(NsSemaphore *semaphore, int initial_value = 0)
+{
+#if defined(WINDOWS)
+#else
+    if(sem_destroy(&semaphore->internal_semaphore) == -1)
+    {
+        return NS_ERROR;
+    }
+#endif
+    return NS_SUCCESS;
+}
+
 int ns_semaphore_close(NsSemaphore *semaphore)
 {
 #if defined(WINDOWS)

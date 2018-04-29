@@ -25,7 +25,8 @@
 
 #define NS_SUCCESS 0
 #define NS_ERROR -1
-#define NS_TIMED_OUT -2
+#define NS_MULTIPLE_ERRORS -2
+#define NS_TIMED_OUT -3
 
 #if defined(WINDOWS)
     #define GetThread() GetCurrentThreadId()

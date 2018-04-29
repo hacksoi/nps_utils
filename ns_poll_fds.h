@@ -1,21 +1,26 @@
+#if 0
+TODO: make this better
+#endif
+
 #ifndef NS_POLL_FDS_H
 #define NS_POLL_FDS_H
 
-#include "ns_poll_fd.h"
+#include "ns_pollfd.h"
 #include "ns_socket.h"
+#include "ns_websocket.h"
 
 
-#if defined(WINDOWS)
-#elif defined(LINUX)
-    typedef pollfd NsPollFd;
-#endif
+struct NsWebSocket;
+internal NsInternalSocket ns_websocket_get_internal(NsWebSocket *websocket);
 
 
-struct NsPollFdsWebSocket
+enum NsPollFdsContainerType
 {
-    // TODO: pollfds should be sorted on the address of the websocket. faster
-    // add() and remove() that way
+    NS_SOCKET, NS_WEBSOCKET
+};
 
+struct NsPollFds
+{
     NsPollFd *pollfds;
     NsCondv empty_condv;
     NsMutex mutex;
@@ -23,27 +28,30 @@ struct NsPollFdsWebSocket
     int size;
     int capacity;
 
-    // array to link pollfd idx back to websocket
-    NsWebSocket **websockets;
+    // array to link pollfd back to its container (websocket, socket, etc.)
+    void **containers;
+    NsPollFdsContainerType container_type;
 };
 
 
 /* API */
 
+/* containers */
+
 int
-ns_poll_fds_create(NsPollFdsWebSocket *poll_fds, int capacity)
+ns_poll_fds_create(NsPollFds *poll_fds, NsPollFdsContainerType container_type, int capacity)
 {
     int status;
 
-    poll_fds->pollfds = ns_memory_allocate(sizeof(NsPollFd)*capacity);
-    if(poll_fds->poll_fds == NULL)
+    NsPollFd *pollfds = (NsPollFd *)ns_memory_allocate(sizeof(NsPollFd)*capacity);
+    if(pollfds == NULL)
     {
         DebugPrintInfo();
         return NS_ERROR;
     }
 
-    poll_fds->websockets = ns_memory_allocate(sizeof(NsWebSocket *)*capacity);
-    if(poll_fds->websockets == NULL)
+    poll_fds->containers = (void **)ns_memory_allocate(sizeof(void *)*capacity);
+    if(poll_fds->containers == NULL)
     {
         DebugPrintInfo();
         return NS_ERROR;
@@ -63,14 +71,21 @@ ns_poll_fds_create(NsPollFdsWebSocket *poll_fds, int capacity)
         return status;
     }
 
+    for(int i = 0; i < capacity; i++)
+    {
+        pollfds[i].fd = -1;
+    }
+
+    poll_fds->pollfds = pollfds;
     poll_fds->capacity = capacity;
     poll_fds->size = 0;
+    poll_fds->container_type = container_type;
 
     return NS_SUCCESS;
 }
 
-internal int
-ns_poll_fds_add(NsPollFds *poll_fds, NsWebsocket *websocket)
+int
+ns_poll_fds_add(NsPollFds *poll_fds, void *container)
 {
     int status;
 
@@ -89,30 +104,101 @@ ns_poll_fds_add(NsPollFds *poll_fds, NsWebsocket *websocket)
 
     NsPollFd *pollfds = poll_fds->pollfds;
     int size = poll_fds->size;
+    NsPollFd *pollfd = NULL;
 
-    NsPollFd *pollfd = &pollfds[size];
-    pollfd->fd = websocket;
-    pollfd->events |= NS_SOCKET_POLL_IN;
-
-    poll_fds->size++;
-
-    status = ns_condv_signal(&poll_fds->empty_condv);
-    if(status != NS_SUCCESS)
+    for(int i = 0; i < poll_fds->capacity; i++)
     {
-        DebugPrintInfo();
-        return status;
+        NsPollFd *pfd = &pollfds[i];
+        if(pfd->fd < 0)
+        {
+            pollfd = pfd;
+            break;
+        }
     }
 
-    status = ns_mutex_unlock(&poll_fds->mutex);
-    if(status != NS_SUCCESS)
+    int num_errors = 0;
+
+    // sanity check
+    if(pollfd != NULL)
+    {
+        switch(poll_fds->container_type)
+        {
+            case NS_SOCKET:
+            {
+                pollfd->fd = ns_socket_get_internal((NsSocket *)container);
+            } break;
+
+            case NS_WEBSOCKET:
+            {
+                pollfd->fd = ns_websocket_get_internal((NsWebSocket *)container);
+            } break;
+
+            default:
+            {
+                DebugPrintInfo();
+                status = NS_ERROR;
+                num_errors++;
+            } break;
+        }
+
+        if(status != NS_ERROR)
+        {
+            pollfd->events = (NS_SOCKET_POLL_IN | NS_SOCKET_POLL_HUP);
+
+            poll_fds->containers[size] = container;
+
+            poll_fds->size++;
+        }
+    }
+    else
     {
         DebugPrintInfo();
-        return status;
+        status = NS_ERROR;
+        num_errors++;
     }
+
+    int signal_status = ns_condv_signal(&poll_fds->empty_condv);
+    if(signal_status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        num_errors++;
+    }
+
+    int unlock_status = ns_mutex_unlock(&poll_fds->mutex);
+    if(unlock_status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        num_errors++;
+    }
+
+    if(num_errors > 1)
+    {
+        return NS_MULTIPLE_ERRORS;
+    }
+
+    if(num_errors == 1)
+    {
+        if(status != NS_SUCCESS)
+        {
+            return status;
+        }
+
+        if(signal_status != NS_SUCCESS)
+        {
+            return signal_status;
+        }
+
+        if(unlock_status != NS_SUCCESS)
+        {
+            return unlock_status;
+        }
+    }
+
+    return NS_SUCCESS;
 }
 
-internal void
-ns_poll_fds_remove(NsPollFdsWebSocket *poll_fds, NsWebsocket *websocket)
+int
+ns_poll_fds_remove(NsPollFds *poll_fds, void *container)
 {
     int status;
 
@@ -124,43 +210,71 @@ ns_poll_fds_remove(NsPollFdsWebSocket *poll_fds, NsWebsocket *websocket)
     }
 
     NsPollFd *pollfds = poll_fds->pollfds;
+    void **containers = poll_fds->containers;
     int size = poll_fds->size;
+    NsPollFd *pollfd = NULL;
 
-    int pollfds_idx = 0;
-    for(; pollfds_idx < size; pollfds_idx++)
+    for(int pollfds_idx = 0; pollfds_idx < size; pollfds_idx++)
     {
-        if(pollfds[pollfds_idx].websocket == websocket])
+        if(container == containers[pollfds_idx])
         {
+            pollfd = &pollfds[pollfds_idx];
             break;
         }
     }
 
+    int num_errors = 0;
+
     // sanity check
-    if(pollfds_idx == num_websockets)
+    if(pollfd == NULL)
     {
         DebugPrintInfo();
-        return status;
+        num_errors++;
     }
 
-    // shift
-    for(int i = pollfds_idx; i < (num_websockets - 1); i++)
+    // sanity check
+    if(pollfd->fd < 0)
     {
-        pollfds[i] = pollfds[i + 1];
+        DebugPrintInfo();
+        num_errors++;
     }
+
+    // negate so poll() ignores it.
+    pollfd->fd = -1;
 
     poll_fds->size--;
 
-    status = ns_mutex_unlock(&poll_fds->mutex);
-    if(status != NS_SUCCESS)
+    int unlock_status = ns_mutex_unlock(&poll_fds->mutex);
+    if(unlock_status != NS_SUCCESS)
     {
         DebugPrintInfo();
-        return status;
+        num_errors++;
     }
+
+    if(num_errors > 1)
+    {
+        return NS_MULTIPLE_ERRORS;
+    }
+
+    if(num_errors == 1)
+    {
+        if(status != NS_SUCCESS)
+        {
+            return status;
+        }
+
+        if(unlock_status != NS_SUCCESS)
+        {
+            return unlock_status;
+        }
+    }
+
+    return NS_SUCCESS;
 }
 
 /* Waits until the poll_fds is nonempty and locks the mutex. */
 int
-ns_poll_fds_wait_till_nonempty_and_lock(NsPollFdsWebSocket *poll_fds)
+ns_poll_fds_wait_till_nonempty_and_lock(NsPollFds *poll_fds)
 {
     int status;
 
@@ -185,7 +299,7 @@ ns_poll_fds_wait_till_nonempty_and_lock(NsPollFdsWebSocket *poll_fds)
 }
 
 int
-ns_poll_fds_unlock(NsPollFdsWebSocket *poll_fds)
+ns_poll_fds_unlock(NsPollFds *poll_fds)
 {
     int status;
 
@@ -199,10 +313,28 @@ ns_poll_fds_unlock(NsPollFdsWebSocket *poll_fds)
     return NS_SUCCESS;
 }
 
-int 
-ns_poll_fds_poll(NsPollFdsWebSocket *poll_fds)
+NsPollFd *
+ns_poll_fds_get(NsPollFds *poll_fds)
 {
-    ns_socket_poll(pollfds, num_websockets, 10);
+    return poll_fds->pollfds;
+}
+
+int
+ns_poll_fds_get_capacity(NsPollFds *poll_fds)
+{
+    return poll_fds->capacity;
+}
+
+void *
+ns_poll_fds_get_container(NsPollFds *poll_fds, int idx)
+{
+    return poll_fds->containers[idx];
+}
+
+bool
+ns_poll_fds_is_full(NsPollFds *poll_fds)
+{
+    return poll_fds->size >= poll_fds->capacity;
 }
 
 #endif

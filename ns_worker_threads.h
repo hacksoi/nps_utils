@@ -5,15 +5,14 @@
 #include "ns_thread.h"
 #include "ns_math.h"
 #include "ns_memory.h"
-
-#include <stdlib.h>
+#include "ns_work_queue.h"
 
 
 struct NsWorkerThreads
 {
     NsThread *threads;
     int thread_capacity;
-    NsWorkerThreadWorkQueue work_queue;
+    NsWorkQueue work_queue;
 };
 
 
@@ -35,7 +34,7 @@ ns_worker_threads_worker_thread_entry(void *thread_input)
             return (void *)status;
         }
 
-        status = work->thread_entry(work->work);
+        status = (int)work->thread_entry(work->work);
         if(status != NS_SUCCESS)
         {
             DebugPrintInfo();
@@ -51,14 +50,14 @@ ns_worker_threads_create(NsWorkerThreads *worker_threads, int max_threads, int m
 {
     int status;
 
-    status = ns_work_queue_create(&worker_threads->work_queue);
+    status = ns_work_queue_create(&worker_threads->work_queue, max_work);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
         return status;
     }
 
-    NsThreads *threads = (NsThread *)ns_memory_allocate(sizeof(NsThread)*max_threads);
+    NsThread *threads = (NsThread *)ns_memory_allocate(sizeof(NsThread)*max_threads);
     if(threads == NULL)
     {
         DebugPrintInfo();
@@ -68,14 +67,14 @@ ns_worker_threads_create(NsWorkerThreads *worker_threads, int max_threads, int m
     for(int i = 0; i < max_threads; i++)
     {
         status = ns_thread_create(&threads[i], ns_worker_threads_worker_thread_entry, worker_threads);
-        if(status != NS_SUCCCESS)
+        if(status != NS_SUCCESS)
         {
             DebugPrintInfo();
             return NS_ERROR;
         }
     }
 
-    worker_threads->threads;
+    worker_threads->threads = threads;
     worker_threads->thread_capacity = max_threads;
 
     return NS_SUCCESS;
@@ -100,7 +99,7 @@ ns_worker_threads_destroy(NsWorkerThreads *worker_threads)
 
 int
 ns_worker_threads_add_work(NsWorkerThreads *worker_threads, 
-                           int (*thread_entry)(void *), void *work)
+                           void *(*thread_entry)(void *), void *work)
 {
     int status;
 
@@ -110,6 +109,7 @@ ns_worker_threads_add_work(NsWorkerThreads *worker_threads,
         DebugPrintInfo();
         return status;
     }
+
     return NS_SUCCESS;
 }
 

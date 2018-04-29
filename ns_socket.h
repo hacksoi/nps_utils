@@ -1,7 +1,8 @@
-#ifndef NS_SOCKET_WRAPPER_H
-#define NS_SOCKET_WRAPPER_H
+#ifndef NS_SOCKET_H
+#define NS_SOCKET_H
 
 #include "ns_common.h"
+#include "ns_pollfd.h"
 
 #if defined(WINDOWS)
     #include <winsock2.h>
@@ -15,21 +16,31 @@
     #include <netinet/in.h>
     #include <netdb.h>
     #include <arpa/inet.h>
+    #include <sys/ioctl.h>
 #endif
 
 
 #if defined(WINDOWS)
     typedef SOCKET NsInternalSocket;
+
     #define NS_INVALID_SOCKET INVALID_SOCKET
     #define NS_SOCKET_ERROR SOCKET_ERROR
     #define NS_SOCKET_RDWR SD_BOTH
     #define DebugSocketPrintInfo() DebugPrintInfo(); fprintf(stderr, "    socket error code: %d", WSAGetLastError());
 #elif defined(LINUX)
     typedef int NsInternalSocket;
+
     #define NS_INVALID_SOCKET -1
     #define NS_SOCKET_ERROR -1
+    #define NS_SOCKET_CLIENT_CLOSED 0
+
+    // shutdown()
     #define NS_SOCKET_RDWR SHUT_RDWR
-    #define DebugSocketPrintInfo() DebugPrintInfo(); perror("    error")
+
+    // ioctl()
+    #define NS_SOCKET_FIONREAD FIONREAD
+
+    #define DebugSocketPrintInfo() DebugPrintInfo(); perror("    socket error")
 #endif
 
 
@@ -37,7 +48,7 @@ struct NsSocket
 {
     NsInternalSocket internal_socket;
 
-    void *(*completion_callback)(void *);
+    void *(*completion_callback)(NsSocket *);
     void *extra_data_void_ptr;
 };
 
@@ -45,7 +56,8 @@ struct NsSocket
 /* Internal */
 
 // get sockaddr, IPv4 or IPv6:
-void *ns_get_in_addr(struct sockaddr *sa)
+internal void *
+ns_get_in_addr(struct sockaddr *sa)
 {
 	if(sa->sa_family == AF_INET)
     {
@@ -55,10 +67,9 @@ void *ns_get_in_addr(struct sockaddr *sa)
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-/* For NsThreadPool. */
-int 
+internal int 
 ns_socket_listen(NsSocket *ns_socket, const char *port, int backlog, 
-                 void *(completion_callback)(NsSocket *), void *extra_data_void_ptr)
+                 void *(*completion_callback)(NsSocket *), void *extra_data_void_ptr)
 {
     int status;
 
@@ -111,6 +122,13 @@ ns_socket_listen(NsSocket *ns_socket, const char *port, int backlog,
     return NS_SUCCESS;
 }
 
+internal NsInternalSocket
+ns_socket_get_internal(NsSocket *socket)
+{
+    NsInternalSocket internal_socket = socket->internal_socket;
+    return internal_socket;
+}
+
 /* API */
 
 int 
@@ -126,6 +144,37 @@ ns_sockets_startup()
 #elif defined(LINUX)
 #endif
     return NS_SUCCESS;
+}
+
+int 
+ns_socket_poll(NsPollFd *fds, nfds_t nfds, int timeout)
+{
+    int num_fds_ready;
+#if defined(WINDOWS)
+#elif defined(LINUX)
+    num_fds_ready = poll(fds, nfds, timeout);
+    if(num_fds_ready == -1)
+    {
+        DebugPrintInfo();
+        return NS_ERROR;
+    }
+#endif
+    return num_fds_ready;
+}
+
+int
+ns_socket_get_bytes_available(NsSocket *socket)
+{
+    int bytes_available;
+#if defined(WINDOWS)
+#elif defined(LINUX)
+    int status = ioctl(socket->internal_socket, NS_SOCKET_FIONREAD, &bytes_available);
+    if(status == -1)
+    {
+        return NS_ERROR;
+    }
+#endif
+    return bytes_available;
 }
 
 int 
@@ -153,7 +202,7 @@ ns_socket_close(NsSocket *socket)
 }
 
 int 
-ns_socket_accept(NsSocket *ns_socket, NsSocket *client_socket, uint32_t timeout_millis = 0, const char *name = NULL)
+ns_socket_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t timeout_millis = 0, const char *name = NULL)
 {
     NsInternalSocket internal_socket = ns_socket->internal_socket;
 
