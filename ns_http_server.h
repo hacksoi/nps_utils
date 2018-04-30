@@ -61,8 +61,6 @@ ns_http_server_peer_thread_entry(void *thread_input)
                     resource_filename = (char *)"404.html";
                 }
 
-                printf("%s\n", resource_filename);
-
                 NsFile file;
                 status = ns_file_open(&file, resource_filename);
                 if(status == NS_SUCCESS)
@@ -188,6 +186,7 @@ ns_http_server_peer_receiver_thread_entry(void *thread_input)
                     if((pollfds[i].revents & NS_SOCKET_POLL_IN) != 0)
                     {
                         NsSocket *socket = (NsSocket *)ns_poll_fds_get_container(&ns_http_server_context.poll_fds, i);
+
                         bool closed = false;
                         int message_size = ns_socket_get_bytes_available(socket);
                         if(message_size > 0)
@@ -237,7 +236,7 @@ ns_http_server_peer_receiver_thread_entry(void *thread_input)
 
                         if(closed)
                         {
-                            printf("connection closed\n");
+                            printf("http server: connection closed\n");
 
                             status = ns_socket_close(socket);
                             if(status != NS_SUCCESS)

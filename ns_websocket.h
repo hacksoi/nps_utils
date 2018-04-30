@@ -21,8 +21,6 @@ TODO: add some sort of error callback
     #define NS_WEBSOCKET_MAX_CONNECTIONS 1024
 #endif
 
-#define NS_WEBSOCKET_PEER_CLOSED -2
-
 #define NS_WEBSOCKET_KEY_HEADER "Sec-WebSocket-Key: "
 #define NS_WEBSOCKET_KEY_HEADER_LENGTH strlen(NS_WEBSOCKET_KEY_HEADER)
 
@@ -51,7 +49,6 @@ struct NsWebSocketMessage
 struct NsWebSocket
 {
     NsSocket socket;
-    bool is_closed;
 
     NsSemaphore message_semaphore;
     NsWebSocketMessage *message_head;
@@ -253,12 +250,17 @@ ns_websocket_message_handler_thread_entry(void *thread_input)
 
         case NS_WEBSOCKET_OPCODE_CONNECTION_CLOSE:
         {
-            status = ns_websocket_close(websocket);
-            if(status != NS_SUCCESS)
+            printf("websocket: received close request. closing...\n");
+
+            // finish closing process
+            int bytes_sent = ns_socket_send(socket, raw_frame, raw_frame_length);
+            if(bytes_sent < 0)
             {
                 DebugPrintInfo();
-                return (void *)status;
+                return (void *)bytes_sent;
             }
+
+            // user should close websocket
         } break;
 
         case NS_WEBSOCKET_OPCODE_PING:
@@ -270,7 +272,7 @@ ns_websocket_message_handler_thread_entry(void *thread_input)
             raw_frame[0] |= NS_WEBSOCKET_OPCODE_PONG;
 
             // send pong
-            int bytes_sent = ns_websocket_send(websocket, raw_frame, raw_frame_length);
+            int bytes_sent = ns_socket_send(socket, raw_frame, raw_frame_length);
             if(bytes_sent != raw_frame_length)
             {
                 DebugPrintInfo();
@@ -323,15 +325,15 @@ ns_websocket_receiver_thread_entry(void *thread_data)
         {
             for(int i = 0; i < pollfds_capacity; i++)
             {
-                if(pollfds[i].fd >= 0)
+                NsPollFd *pollfd = &pollfds[i];
+                if(pollfd->fd >= 0)
                 {
                     // is this websocket ready for reading?
-                    if((pollfds[i].revents & NS_SOCKET_POLL_IN) != 0)
+                    if((pollfd->revents & NS_SOCKET_POLL_IN) != 0)
                     {
                         NsWebSocket *websocket = (NsWebSocket *)ns_poll_fds_get_container(&ns_websocket_context.poll_fds, i);
                         NsSocket *socket = &websocket->socket;
 
-                        bool closed = false;
                         int message_size = ns_socket_get_bytes_available(socket);
                         if(message_size > 0)
                         {
@@ -362,7 +364,7 @@ ns_websocket_receiver_thread_entry(void *thread_data)
                             }
                             else if(bytes_received == 0)
                             {
-                                closed = true;
+                                // user should close websocket
                             }
                             else
                             {
@@ -372,31 +374,18 @@ ns_websocket_receiver_thread_entry(void *thread_data)
                         }
                         else if(message_size == 0)
                         {
-                            closed = true;
+                            // user should close websocket
+                        }
+                        // were we removed?
+                        else if(message_size == NS_SOCKET_BAD_FD &&
+                                pollfd->fd == -1)
+                        {
+                            printf("websocket: socket removed right out from under our noses!\n");
                         }
                         else
                         {
                             DebugPrintInfo();
                             return (void *)message_size;
-                        }
-
-                        if(closed)
-                        {
-                            printf("connection closed\n");
-
-                            status = ns_websocket_close(websocket);
-                            if(status != NS_SUCCESS)
-                            {
-                                DebugPrintInfo();
-                                return (void *)status;
-                            }
-
-                            status = ns_poll_fds_remove(&ns_websocket_context.poll_fds, websocket);
-                            if(status != NS_SUCCESS)
-                            {
-                                DebugPrintInfo();
-                                return (void *)status;
-                            }
                         }
                     }
                 }
@@ -466,23 +455,10 @@ ns_websocket_listen(NsWebSocket *websocket, const char *port)
 {
     int status;
 
-    if(ns_poll_fds_is_full(&ns_websocket_context.poll_fds))
-    {
-        DebugPrintInfo();
-        return NS_ERROR;
-    }
-
     if(ns_socket_listen(&websocket->socket, port) != NS_SUCCESS)
     {
         DebugPrintInfo();
         return NS_ERROR;
-    }
-
-    status = ns_poll_fds_add(&ns_websocket_context.poll_fds, websocket);
-    if(status != NS_SUCCESS)
-    {
-        DebugPrintInfo();
-        return status;
     }
 
     return NS_SUCCESS;
@@ -494,28 +470,12 @@ ns_websocket_close(NsWebSocket *websocket)
     int status;
     NsSocket *socket = &websocket->socket;
 
-    websocket->is_closed = true;
-
-    // send close
+    // must remove() before close() because ns_socket_get_bytes_available()
+    status = ns_poll_fds_remove(&ns_websocket_context.poll_fds, websocket);
+    if(status != NS_SUCCESS)
     {
-        uint8_t frame[2] = {};
-        int bytes_received;
-        {
-            // set fin bit
-            frame[0] |= 0x80;
-
-            // set opcode to close
-            frame[0] |= 0x08;
-
-            bytes_received = 2;
-        }
-
-        status = ns_socket_send(socket, frame, bytes_received);
-        if(status <= 0)
-        {
-            DebugPrintInfo();
-            return status;
-        }
+        DebugPrintInfo();
+        return status;
     }
 
     status = ns_socket_close(&websocket->socket);
@@ -523,13 +483,6 @@ ns_websocket_close(NsWebSocket *websocket)
     {
         DebugPrintInfo();
         return NS_ERROR;
-    }
-
-    status = ns_poll_fds_remove(&ns_websocket_context.poll_fds, websocket);
-    if(status != NS_SUCCESS)
-    {
-        DebugPrintInfo();
-        return status;
     }
 
     return NS_SUCCESS;
@@ -624,7 +577,7 @@ ns_websocket_get_peer(NsWebSocket *websocket, NsWebSocket *peer_websocket)
         return bytes_sent;
     }
 
-    status = ns_poll_fds_add(&ns_websocket_context.poll_fds, websocket);
+    status = ns_poll_fds_add(&ns_websocket_context.poll_fds, peer_websocket);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
@@ -658,8 +611,12 @@ ns_websocket_send(NsWebSocket *websocket, uint8_t *message, uint32_t message_len
 {
     NsSocket *socket = &websocket->socket;
 
-    uint8_t frame[256] = {};
-    assert(message_length < sizeof(frame));
+    uint8_t frame[Kilobytes(4)] = {};
+    if(message_length >= sizeof(frame))
+    {
+        DebugPrintInfo();
+        return NS_ERROR;
+    }
 
     // fill out frame
     int bytes_received;
@@ -691,18 +648,18 @@ ns_websocket_send(NsWebSocket *websocket, uint8_t *message, uint32_t message_len
     }
 
     int bytes_sent = ns_socket_send(socket, frame, bytes_received);
-    if(bytes_sent <= 0)
+    if(bytes_sent != bytes_received)
     {
-        if(websocket->is_closed)
+        if(bytes_sent == NS_SOCKET_CONNECTION_CLOSED)
         {
-            return NS_WEBSOCKET_PEER_CLOSED;
+            return 0;
         }
 
         DebugPrintInfo();
-        return NS_ERROR;
+        return bytes_sent;
     }
 
-    return bytes_sent;
+    return message_length;
 }
 
 int 

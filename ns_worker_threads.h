@@ -37,7 +37,6 @@ ns_worker_threads_worker_thread_entry(void *thread_input)
         status = (int)work->thread_entry(work->work);
         if(status != NS_SUCCESS)
         {
-            DebugPrintInfo();
             return (void *)status;
         }
     }

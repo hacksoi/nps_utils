@@ -17,7 +17,7 @@
 
 
 void
-ns_poll_fds_print(NsPollFd *pollfd)
+ns_pollfd_print(NsPollFd *pollfd)
 {
     printf("pollfd: fd: %d, event: %d, revent: %d\n",
            pollfd->fd, pollfd->events, pollfd->revents);

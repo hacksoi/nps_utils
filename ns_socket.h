@@ -14,6 +14,7 @@ TODO: change 'peer' to 'peer'
 
     #pragma comment(lib, "Ws2_32.lib")
 #elif defined(LINUX)
+    #include <errno.h>
     #include <unistd.h>
     #include <sys/types.h>
     #include <sys/socket.h>
@@ -40,14 +41,20 @@ TODO: change 'peer' to 'peer'
     #define NS_SOCKET_ERROR -1
     #define NS_SOCKET_PEER_CLOSED 0
 
+    // send()
+    #define NS_SOCKET_SEND_MSG_NOSIGNAL MSG_NOSIGNAL 
+
     // shutdown()
-    #define NS_SOCKET_RDWR SHUT_RDWR
+    #define NS_SOCKET_SHUT_RDWR SHUT_RDWR
 
     // ioctl()
-    #define NS_SOCKET_FIONREAD FIONREAD
+    #define NS_SOCKET_IOCTL_FIONREAD FIONREAD
 
     #define DebugSocketPrintInfo() DebugPrintInfo(); perror("    socket error")
 #endif
+
+#define NS_SOCKET_CONNECTION_CLOSED -2
+#define NS_SOCKET_BAD_FD -3
 
 
 struct NsSocket
@@ -174,11 +181,17 @@ ns_socket_get_bytes_available(NsSocket *socket)
     int bytes_available;
 #if defined(WINDOWS)
 #elif defined(LINUX)
-    int status = ioctl(socket->internal_socket, NS_SOCKET_FIONREAD, &bytes_available);
+    int status = ioctl(socket->internal_socket, NS_SOCKET_IOCTL_FIONREAD, &bytes_available);
     if(status == -1)
     {
         DebugSocketPrintInfo();
         printf("    internal socket: %d\n", socket->internal_socket);
+
+        if(errno == EBADF)
+        {
+            return NS_SOCKET_BAD_FD;
+        }
+
         return NS_ERROR;
     }
 #endif
@@ -195,7 +208,10 @@ ns_socket_listen(NsSocket *ns_socket, const char *port, int backlog = 10)
 int 
 ns_socket_close(NsSocket *socket)
 {
-    if(close(socket->internal_socket) == NS_SOCKET_ERROR)
+    int status;
+
+    status = close(socket->internal_socket);
+    if(status == -1)
     {
         DebugSocketPrintInfo();
         return NS_ERROR;
@@ -260,10 +276,20 @@ ns_socket_get_peer(NsSocket *ns_socket, NsSocket *peer_socket, uint32_t timeout_
 int 
 ns_socket_send(NsSocket *socket, char *buffer, uint32_t buffer_size)
 {
-    int bytes_sent = send(socket->internal_socket, buffer, buffer_size, 0);
-    if(bytes_sent <= 0)
+    int bytes_sent = send(socket->internal_socket, buffer, buffer_size, NS_SOCKET_SEND_MSG_NOSIGNAL);
+    if(bytes_sent < 0)
     {
-        DebugSocketPrintInfo();
+        if(errno == EPIPE || // EPIPE means the peer closed gracefully
+           errno == ECONNRESET // ECONNRESET means the peer didn't close gracefully
+           )
+        {
+            return NS_SOCKET_CONNECTION_CLOSED;
+        }
+        else
+        {
+            DebugSocketPrintInfo();
+            printf("    fd: %d\n", socket->internal_socket);
+        }
     }
     return bytes_sent;
 }
@@ -279,9 +305,10 @@ int
 ns_socket_receive(NsSocket *socket, char *buffer, uint32_t buffer_size)
 {
     int bytes_received = recv(socket->internal_socket, buffer, buffer_size, 0);
-    if(bytes_received == NS_SOCKET_ERROR)
+    if(bytes_received < 0)
     {
         DebugSocketPrintInfo();
+        printf("    fd: %d\n", socket->internal_socket);
     }
     return bytes_received;
 }

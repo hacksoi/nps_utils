@@ -140,7 +140,7 @@ ns_poll_fds_add(NsPollFds *poll_fds, void *container)
         } break;
     }
 
-    pollfd->events = (NS_SOCKET_POLL_IN | NS_SOCKET_POLL_HUP);
+    pollfd->events = NS_SOCKET_POLL_IN;
     poll_fds->containers[pollfd_idx] = container;
     poll_fds->size++;
 
