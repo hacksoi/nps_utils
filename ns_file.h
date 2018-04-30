@@ -44,6 +44,12 @@ ns_file_open(NsFile *file, char *filename)
     return NS_SUCCESS;
 }
 
+int
+ns_file_open(NsFile *file, const char *filename)
+{
+    return ns_file_open(file, (char *)filename);
+}
+
 int 
 ns_file_close(NsFile *file)
 {
@@ -56,7 +62,7 @@ ns_file_close(NsFile *file)
 }
 
 int 
-ns_file_get_filesize(NsFile *file)
+ns_file_get_size(NsFile *file)
 {
     FILE *internal_file = file->internal_file;
 
@@ -81,7 +87,7 @@ ns_file_get_filesize(NsFile *file)
 int 
 ns_file_load(NsFile *file, char *buffer, int buffer_size)
 {
-    int filesize = ns_file_get_filesize(file);
+    int filesize = ns_file_get_size(file);
     if(buffer_size < filesize)
     {
         return NS_ERROR;

@@ -1,3 +1,7 @@
+#if 0
+TODO: change 'peer' to 'peer'
+#endif
+
 #ifndef NS_SOCKET_H
 #define NS_SOCKET_H
 
@@ -19,6 +23,8 @@
     #include <sys/ioctl.h>
 #endif
 
+#include <string.h>
+
 
 #if defined(WINDOWS)
     typedef SOCKET NsInternalSocket;
@@ -26,13 +32,13 @@
     #define NS_INVALID_SOCKET INVALID_SOCKET
     #define NS_SOCKET_ERROR SOCKET_ERROR
     #define NS_SOCKET_RDWR SD_BOTH
-    #define DebugSocketPrintInfo() DebugPrintInfo(); fprintf(stderr, "    socket error code: %d", WSAGetLastError());
+    #define DebugSocketPrintInfo() DebugSocketPrintInfo(); fprintf(stderr, "    socket error code: %d", WSAGetLastError());
 #elif defined(LINUX)
     typedef int NsInternalSocket;
 
     #define NS_INVALID_SOCKET -1
     #define NS_SOCKET_ERROR -1
-    #define NS_SOCKET_CLIENT_CLOSED 0
+    #define NS_SOCKET_PEER_CLOSED 0
 
     // shutdown()
     #define NS_SOCKET_RDWR SHUT_RDWR
@@ -155,7 +161,7 @@ ns_socket_poll(NsPollFd *fds, nfds_t nfds, int timeout)
     num_fds_ready = poll(fds, nfds, timeout);
     if(num_fds_ready == -1)
     {
-        DebugPrintInfo();
+        DebugSocketPrintInfo();
         return NS_ERROR;
     }
 #endif
@@ -171,6 +177,8 @@ ns_socket_get_bytes_available(NsSocket *socket)
     int status = ioctl(socket->internal_socket, NS_SOCKET_FIONREAD, &bytes_available);
     if(status == -1)
     {
+        DebugSocketPrintInfo();
+        printf("    internal socket: %d\n", socket->internal_socket);
         return NS_ERROR;
     }
 #endif
@@ -202,7 +210,7 @@ ns_socket_close(NsSocket *socket)
 }
 
 int 
-ns_socket_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t timeout_millis = 0, const char *name = NULL)
+ns_socket_get_peer(NsSocket *ns_socket, NsSocket *peer_socket, uint32_t timeout_millis = 0, const char *name = NULL)
 {
     NsInternalSocket internal_socket = ns_socket->internal_socket;
 
@@ -230,8 +238,8 @@ ns_socket_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t time
 
     sockaddr_storage their_addr;
     socklen_t sin_size = sizeof(their_addr);
-    NsInternalSocket internal_client_socket = accept(internal_socket, (sockaddr *)&their_addr, &sin_size);
-    if(internal_client_socket == NS_INVALID_SOCKET)
+    NsInternalSocket internal_peer_socket = accept(internal_socket, (sockaddr *)&their_addr, &sin_size);
+    if(internal_peer_socket == NS_INVALID_SOCKET)
     {
         DebugSocketPrintInfo();
         return NS_ERROR;
@@ -244,7 +252,7 @@ ns_socket_get_client(NsSocket *ns_socket, NsSocket *client_socket, uint32_t time
         printf("%s: got connection from %s\n", name, s);
     }
 
-    client_socket->internal_socket = internal_client_socket;
+    peer_socket->internal_socket = internal_peer_socket;
 
     return NS_SUCCESS;
 }
@@ -256,7 +264,6 @@ ns_socket_send(NsSocket *socket, char *buffer, uint32_t buffer_size)
     if(bytes_sent <= 0)
     {
         DebugSocketPrintInfo();
-        return NS_ERROR;
     }
     return bytes_sent;
 }
@@ -275,7 +282,6 @@ ns_socket_receive(NsSocket *socket, char *buffer, uint32_t buffer_size)
     if(bytes_received == NS_SOCKET_ERROR)
     {
         DebugSocketPrintInfo();
-        return NS_ERROR;
     }
     return bytes_received;
 }
@@ -294,7 +300,7 @@ ns_socket_shutdown(NsSocket *socket, int how)
 #elif defined(LINUX)
     if(shutdown(socket->internal_socket, how))
     {
-        DebugPrintInfo();
+        DebugSocketPrintInfo();
         return NS_ERROR;
     }
 #endif

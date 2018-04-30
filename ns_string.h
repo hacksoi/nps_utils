@@ -58,7 +58,7 @@ ns_string_contains(char *String1, char *String2)
 }
 
 inline void
-ns_reverse(char *String, int Length)
+ns_string_reverse(char *String, int Length)
 {
     for(int i = 0; i < Length/2; i++)
     {
@@ -69,7 +69,7 @@ ns_reverse(char *String, int Length)
 }
 
 inline uint32_t
-ns_convert_to_string(char *Dest, int Value)
+ns_string_from_int(char *Dest, int Value)
 {
     if(Value < 0)
     {
@@ -84,7 +84,7 @@ ns_convert_to_string(char *Dest, int Value)
     }
     while(Value > 0);
 
-    ns_reverse(Dest, NumDigits);
+    ns_string_reverse(Dest, NumDigits);
 
     return NumDigits;
 }
