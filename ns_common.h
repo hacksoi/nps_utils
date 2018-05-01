@@ -21,6 +21,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <assert.h>
 
 
 #define NS_SUCCESS 0
@@ -28,12 +29,17 @@
 #define NS_MULTIPLE_ERRORS -2
 #define NS_TIMED_OUT -3
 
+// TODO: print stack trace instead. use backtrace() and addr2line.
+#define DebugPrintInfo() fprintf(stderr, "thread: %lu. %s %s line: %d\n", \
+                                 GetThread(), __FILE__, __PRETTY_FUNCTION__, __LINE__)
+
 #if defined(WINDOWS)
     #define GetThread() GetCurrentThreadId()
     #define __PRETTY_FUNCTION__ __FUNCSIG__
 #elif defined(LINUX)
     #define GetThread() pthread_self()
     //#define __PRETTY_FUNCTION__ __PRETTY_FUNCTION__
+    #define DebugPrintOsInfo() DebugPrintInfo(); perror("    error")
 #endif
 
 #define local static
@@ -46,10 +52,7 @@
 
 #define ArrayCount(Array) (sizeof(Array)/sizeof(Array[0]))
 
-#define Assert(Expression) if(!(Expression)) *(int *)0 = 0;
-
-// TODO: print stack trace instead. use backtrace() and addr2line.
-#define DebugPrintInfo() fprintf(stdout, "thread: %lu. %s %s line: %d\n", \
-                                 GetThread(), __FILE__, __PRETTY_FUNCTION__, __LINE__)
+//#define Assert(Expression) if(!(Expression)) *(int *)0 = 0;
+#define Assert(Expression) assert(Expression);
 
 #endif

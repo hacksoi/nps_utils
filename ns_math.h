@@ -116,42 +116,42 @@ IsWithinTolerance(float ActualValue, float Value)
 }
 
 inline internal int
-min(int A, int B)
+ns_math_min(int A, int B)
 {
     int Result = A < B ? A : B;
     return Result;
 }
 
 inline internal int
-max(int A, int B)
+ns_math_max(int A, int B)
 {
     int Result = A > B ? A : B;
     return Result;
 }
 
 inline internal uint32_t
-min(uint32_t A, uint32_t B)
+ns_math_min(uint32_t A, uint32_t B)
 {
     uint32_t Result = A < B ? A : B;
     return Result;
 }
 
 inline internal uint32_t
-max(uint32_t A, uint32_t B)
+ns_math_max(uint32_t A, uint32_t B)
 {
     uint32_t Result = A > B ? A : B;
     return Result;
 }
 
 inline internal float
-min(float A, float B)
+ns_math_min(float A, float B)
 {
     float Result = A < B ? A : B;
     return Result;
 }
 
 inline internal float
-max(float A, float B)
+ns_math_max(float A, float B)
 {
     float Result = A > B ? A : B;
     return Result;

@@ -1,5 +1,5 @@
 #if 0
-TODO: make this better
+TODO: add ns_poll_fds_poll()
 #endif
 
 #ifndef NS_POLL_FDS_H
@@ -7,11 +7,7 @@ TODO: make this better
 
 #include "ns_pollfd.h"
 #include "ns_socket.h"
-#include "ns_websocket.h"
-
-
-struct NsWebSocket;
-internal NsInternalSocket ns_websocket_get_internal(NsWebSocket *websocket);
+#include "ns_condv.h"
 
 
 enum NsPollFdsContainerType
@@ -32,6 +28,23 @@ struct NsPollFds
     void **containers;
     NsPollFdsContainerType container_type;
 };
+
+
+int ns_poll_fds_add(NsPollFds *poll_fds, void *container);
+int ns_poll_fds_remove(NsPollFds *poll_fds, void *container);
+int ns_poll_fds_wait_till_nonempty_and_lock(NsPollFds *poll_fds);
+int ns_poll_fds_unlock(NsPollFds *poll_fds);
+NsPollFd * ns_poll_fds_get(NsPollFds *poll_fds);
+int ns_poll_fds_get_capacity(NsPollFds *poll_fds);
+void *ns_poll_fds_get_container(NsPollFds *poll_fds, int idx);
+bool ns_poll_fds_is_full(NsPollFds *poll_fds);
+int ns_poll_fds_create(NsPollFds *poll_fds, NsPollFdsContainerType container_type, int capacity);
+
+
+#include "ns_websocket.h"
+
+
+internal NsInternalSocket ns_websocket_get_internal(struct NsWebSocket *websocket);
 
 
 /* API */

@@ -226,7 +226,7 @@ ns_socket_close(NsSocket *socket)
 }
 
 int 
-ns_socket_get_peer(NsSocket *ns_socket, NsSocket *peer_socket, uint32_t timeout_millis = 0, const char *name = NULL)
+ns_socket_accept(NsSocket *ns_socket, NsSocket *peer_socket, uint32_t timeout_millis = 0, const char *name = NULL)
 {
     NsInternalSocket internal_socket = ns_socket->internal_socket;
 

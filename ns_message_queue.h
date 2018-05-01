@@ -193,7 +193,7 @@ int ns_message_queue_add(NsMessageQueue *message_queue, uint8_t *message, const 
         if(tail > head)
         {
             uint32_t bytes_to_end = (message_queue->end - tail);
-            uint32_t bytes_to_copy = min(message_left, bytes_to_end);
+            uint32_t bytes_to_copy = ns_math_min(message_left, bytes_to_end);
             memcpy(tail, message, bytes_to_copy);
             message += bytes_to_copy;
             message_left -= bytes_to_copy;
@@ -287,7 +287,7 @@ int ns_message_queue_get(NsMessageQueue *message_queue,
         if(head > tail)
         {
             uint32_t bytes_to_end = (message_queue->end - head);
-            uint32_t bytes_to_copy = min(dest_left, min(message_left, bytes_to_end));
+            uint32_t bytes_to_copy = ns_math_min(dest_left, ns_math_min(message_left, bytes_to_end));
             memcpy(dest, head, bytes_to_copy);
             dest += bytes_to_copy;
             dest_left -= bytes_to_copy;
@@ -309,7 +309,7 @@ int ns_message_queue_get(NsMessageQueue *message_queue,
         // is dest large enough?
         if(dest_left >= message_left)
         {
-            uint32_t bytes_to_copy = min(dest_left, message_left);
+            uint32_t bytes_to_copy = ns_math_min(dest_left, message_left);
             memcpy(dest, head, bytes_to_copy);
             head += bytes_to_copy;
         }

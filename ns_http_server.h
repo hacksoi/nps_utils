@@ -16,8 +16,12 @@ struct NsHttpServer
 {
     int max_connections;
     const char *port;
-    NsSocketPool socket_pool;
+
+    NsThread ns_http_server_peer_getter_thread;
+    NsThread ns_http_server_peer_receiver_thread;
     NsWorkerThreads worker_threads;
+
+    NsSocketPool socket_pool;
     NsPollFds poll_fds;
 };
 
@@ -293,7 +297,7 @@ ns_http_server_peer_getter_thread_entry(void *thread_input)
             return (void *)status;
         }
 
-        status = ns_socket_get_peer(&socket, peer_socket, 0, "http server");
+        status = ns_socket_accept(&socket, peer_socket, 0, "http server");
         if(status != NS_SUCCESS)
         {
             DebugPrintInfo();
@@ -313,7 +317,7 @@ ns_http_server_peer_getter_thread_entry(void *thread_input)
 /* API */
 
 int
-ns_http_server_startup(int max_connections, const char *port, int max_threads)
+ns_http_server_startup(const char *port, int max_connections, int max_threads)
 {
     int status;
 
@@ -331,14 +335,15 @@ ns_http_server_startup(int max_connections, const char *port, int max_threads)
         return status;
     }
 
-    status = ns_worker_threads_create(&ns_http_server_context.worker_threads, max_threads, max_connections);
+    status = ns_socket_pool_create(&ns_http_server_context.socket_pool, max_connections);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
         return status;
     }
 
-    status = ns_socket_pool_create(&ns_http_server_context.socket_pool, max_connections);
+    int max_work = ns_math_max(2*max_connections, 64);
+    status = ns_worker_threads_create(&ns_http_server_context.worker_threads, max_threads - 2, max_work);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
@@ -348,16 +353,16 @@ ns_http_server_startup(int max_connections, const char *port, int max_threads)
     ns_http_server_context.max_connections = max_connections;
     ns_http_server_context.port = port;
 
-    status = ns_worker_threads_add_work(&ns_http_server_context.worker_threads, 
-                                        ns_http_server_peer_getter_thread_entry, NULL);
+    status = ns_thread_create(&ns_http_server_context.ns_http_server_peer_getter_thread, 
+                              ns_http_server_peer_getter_thread_entry, NULL);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
         return status;
     }
 
-    status = ns_worker_threads_add_work(&ns_http_server_context.worker_threads, 
-                                        ns_http_server_peer_receiver_thread_entry, NULL);
+    status = ns_thread_create(&ns_http_server_context.ns_http_server_peer_receiver_thread, 
+                              ns_http_server_peer_receiver_thread_entry, NULL);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();

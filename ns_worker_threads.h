@@ -47,6 +47,13 @@ ns_worker_threads_worker_thread_entry(void *thread_input)
 int
 ns_worker_threads_create(NsWorkerThreads *worker_threads, int max_threads, int max_work)
 {
+    // we need at least 2... for now
+    if(max_work < 2)
+    {
+        DebugPrintInfo();
+        return NS_ERROR;
+    }
+
     int status;
 
     status = ns_work_queue_create(&worker_threads->work_queue, max_work);

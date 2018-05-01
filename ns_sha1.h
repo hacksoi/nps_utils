@@ -52,7 +52,7 @@ int ns_sha1(char *string, char *dest)
                     num_appends_bits = (512 - mod) + 448;
                 }
 
-                assert((num_appends_bits & 0x07) == 0);
+                Assert((num_appends_bits & 0x07) == 0);
             }
 
             // append 0 bytes
@@ -192,7 +192,7 @@ int ns_sha1(char *string, char *dest)
             dest[dest_idx + 3] = ns_to_base64(fourth);
         }
 
-        assert(i == 18);
+        Assert(i == 18);
 
         // handle remainder
         {

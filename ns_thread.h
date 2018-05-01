@@ -4,12 +4,13 @@
 #include "ns_common.h"
 #include "ns_mutex.h"
 
-#include <stdlib.h>
-
 #if defined(WINDOWS)
 #elif defined(LINUX)
+    #include <unistd.h>
     #include <pthread.h>
 #endif
+
+#include <stdlib.h>
 
 
 #if defined(WINDOWS)
@@ -44,7 +45,6 @@ ns_thread_entry(void *input)
     return result;
 }
 
-
 int
 ns_thread_create(NsThread *thread, void *(*thread_entry)(void *), void *thread_input,
                  void (*completion_callback)(NsThread *), void *extra_data_void_ptr)
@@ -75,6 +75,22 @@ ns_thread_create(NsThread *thread, void *(*thread_entry)(void *), void *thread_i
 {
     int status = ns_thread_create(thread, thread_entry, thread_input, NULL, NULL);
     return status;
+}
+
+int
+ns_thread_sleep(unsigned long millis)
+{
+    int status;
+#if defined(WINDOWS)
+#elif defined(LINUX)
+    status = usleep(1000*millis);
+    if(status == -1)
+    {
+        DebugPrintInfo();
+        return NS_ERROR;
+    }
+#endif
+    return NS_SUCCESS;
 }
 
 #endif

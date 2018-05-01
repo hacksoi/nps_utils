@@ -17,10 +17,6 @@ TODO: add some sort of error callback
 #include "ns_poll_fds.h"
 
 
-#ifndef NS_WEBSOCKET_MAX_CONNECTIONS
-    #define NS_WEBSOCKET_MAX_CONNECTIONS 1024
-#endif
-
 #define NS_WEBSOCKET_KEY_HEADER "Sec-WebSocket-Key: "
 #define NS_WEBSOCKET_KEY_HEADER_LENGTH strlen(NS_WEBSOCKET_KEY_HEADER)
 
@@ -32,11 +28,16 @@ TODO: add some sort of error callback
 #define NS_WEBSOCKET_OPCODE_PONG 0x0A
 
 
+enum NsWebSocketDataType
+{
+    TEXT, BINARY
+};
+
 struct NsWebSocketMessage
 {
     // we shove these extra things in here so that it's a littler easier to pass
     // from the receiver to the handler thread
-    NsWebSocket *websocket; // websocket this message belongs to
+    struct NsWebSocket *websocket; // websocket this message belongs to
     uint8_t *raw_frame;
     int raw_frame_length;
 
@@ -72,7 +73,7 @@ struct NsWebSocketContext
 {
     NsWorkerThreads worker_threads;
     NsPollFds poll_fds;
-    NsWebSocket *websockets[NS_WEBSOCKET_MAX_CONNECTIONS];
+    NsThread ns_websocket_receiver_thread;
 };
 
 
@@ -81,9 +82,9 @@ global NsWebSocketContext ns_websocket_context;
 
 int ns_websocket_create(NsWebSocket *websocket, const char *port);
 int ns_websocket_destroy(NsWebSocket *websocket);
-int ns_websocket_get_peer(NsWebSocket *websocket, NsWebSocket *peer_websocket);
+int ns_websocket_accept(NsWebSocket *websocket, NsWebSocket *peer_websocket);
 int ns_websocket_receive(NsWebSocket *websocket, uint8_t *dest, uint32_t dest_size);
-int ns_websocket_send(NsWebSocket *websocket, uint8_t *message, uint32_t message_length);
+int ns_websocket_send(NsWebSocket *websocket, uint8_t *message, uint32_t message_length, NsWebSocketDataType data_type);
 int ns_websocket_close(NsWebSocket *websocket);
 
 
@@ -183,7 +184,7 @@ ns_websocket_message_get(NsWebSocket *websocket, uint8_t *dest, uint32_t dest_si
         return NS_ERROR;
     }
 
-    int bytes_to_copy = min((uint32_t)head->payload_length, (uint32_t)dest_size);
+    int bytes_to_copy = ns_math_min((uint32_t)head->payload_length, (uint32_t)dest_size);
     memcpy(dest, head->payload, bytes_to_copy);
 
     // did we copy the whole message?
@@ -417,21 +418,6 @@ ns_websockets_startup(int max_connections, int max_threads)
         return NS_ERROR;
     }
 
-    status = ns_sockets_startup();
-    if(status != NS_SUCCESS)
-    {
-        DebugPrintInfo();
-        return status;
-    }
-
-    status = ns_worker_threads_create(&ns_websocket_context.worker_threads, 
-                                      max_threads, max_connections);
-    if(status != NS_SUCCESS)
-    {
-        DebugPrintInfo();
-        return status;
-    }
-
     status = ns_poll_fds_create(&ns_websocket_context.poll_fds, NS_WEBSOCKET, max_connections);
     if(status != NS_SUCCESS)
     {
@@ -439,8 +425,17 @@ ns_websockets_startup(int max_connections, int max_threads)
         return status;
     }
 
-    status = ns_worker_threads_add_work(&ns_websocket_context.worker_threads,
-                                        ns_websocket_receiver_thread_entry, NULL);
+    int max_work = ns_math_max(2*max_connections, 64);
+    status = ns_worker_threads_create(&ns_websocket_context.worker_threads, 
+                                      max_threads - 1, max_work);
+    if(status != NS_SUCCESS)
+    {
+        DebugPrintInfo();
+        return status;
+    }
+
+    status = ns_thread_create(&ns_websocket_context.ns_websocket_receiver_thread,
+                              ns_websocket_receiver_thread_entry, NULL);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
@@ -489,7 +484,7 @@ ns_websocket_close(NsWebSocket *websocket)
 }
 
 int 
-ns_websocket_get_peer(NsWebSocket *websocket, NsWebSocket *peer_websocket)
+ns_websocket_accept(NsWebSocket *websocket, NsWebSocket *peer_websocket)
 {
     int status;
 
@@ -500,7 +495,7 @@ ns_websocket_get_peer(NsWebSocket *websocket, NsWebSocket *peer_websocket)
     }
 
     NsSocket *peer_socket = &peer_websocket->socket;
-    status = ns_socket_get_peer(&websocket->socket, peer_socket);
+    status = ns_socket_accept(&websocket->socket, peer_socket);
     if(status != NS_SUCCESS)
     {
         DebugPrintInfo();
@@ -607,48 +602,67 @@ ns_websocket_receive(NsWebSocket *websocket, char *dest, uint32_t dest_size)
 }
 
 int 
-ns_websocket_send(NsWebSocket *websocket, uint8_t *message, uint32_t message_length)
+ns_websocket_send(NsWebSocket *websocket, uint8_t *message, uint32_t message_size, NsWebSocketDataType data_type)
 {
     NsSocket *socket = &websocket->socket;
 
-    uint8_t frame[Kilobytes(4)] = {};
-    if(message_length >= sizeof(frame))
+    uint8_t frame[Kilobytes(64)]; // TODO: ...
+    if(message_size >= sizeof(frame))
     {
         DebugPrintInfo();
         return NS_ERROR;
     }
 
     // fill out frame
-    int bytes_received;
+    int frame_size;
     {
         // set fin bit
-        frame[0] |= 0x80;
+        frame[0] = 0x80;
 
         // set opcode to text
-        frame[0] |= 0x01;
+        switch(data_type)
+        {
+            case TEXT:
+            {
+                frame[0] |= 0x01;
+            } break;
+
+            case BINARY:
+            {
+                frame[0] |= 0x02;
+            } break;
+        }
 
         // set payload length
         uint8_t *payload;
-        if(message_length <= 125)
+        if(message_size <= 125)
         {
-            frame[1] |= message_length;
+            frame[1] = message_size;
             payload = &frame[2];
-            bytes_received = 2;
+            frame_size = 2;
+        }
+        else if(message_size <= 0xffff)
+        {
+            frame[1] = 126;
+            ns_put16be(&frame[2], message_size);
+            payload = &frame[4];
+            frame_size = 4;
         }
         else
         {
-            ns_put64be(&frame[2], message_length);
+            frame[1] = 127;
+            ns_put64be(&frame[2], message_size);
             payload = &frame[10];
-            bytes_received = 10;
+            frame_size = 10;
         }
 
         // copy payload
-        memcpy(payload, message, message_length);
-        bytes_received += message_length;
+        memcpy(payload, message, message_size);
+        frame_size += message_size;
     }
 
-    int bytes_sent = ns_socket_send(socket, frame, bytes_received);
-    if(bytes_sent != bytes_received)
+    int bytes_sent = ns_socket_send(socket, frame, frame_size);
+    if(bytes_sent != frame_size)
     {
         if(bytes_sent == NS_SOCKET_CONNECTION_CLOSED)
         {
@@ -659,13 +673,13 @@ ns_websocket_send(NsWebSocket *websocket, uint8_t *message, uint32_t message_len
         return bytes_sent;
     }
 
-    return message_length;
+    return message_size;
 }
 
 int 
-ns_websocket_send(NsWebSocket *websocket, char *message, uint32_t message_length)
+ns_websocket_send(NsWebSocket *websocket, char *message, uint32_t message_length, NsWebSocketDataType data_type)
 {
-    int bytes_sent = ns_websocket_send(websocket, (uint8_t *)message, message_length);
+    int bytes_sent = ns_websocket_send(websocket, (uint8_t *)message, message_length, data_type);
     return bytes_sent;
 }
 

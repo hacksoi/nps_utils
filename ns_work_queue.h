@@ -83,6 +83,9 @@ ns_work_queue_create(NsWorkQueue *work_queue, int max_work)
         return status;
     }
 
+    // technically, one element is unused
+    max_work++;
+
     NsWork *work = (NsWork *)ns_memory_allocate(sizeof(NsWork)*max_work);
     if(work == NULL)
     {
