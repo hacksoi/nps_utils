@@ -14,7 +14,7 @@ global v4 GLUTILS_CYAN = {0.0f, 1.0f, 1.0f, 1.0f};
 global v4 GLUTILS_YELLOW = {1.0f, 1.0f, 0.0f, 1.0f};
 global v4 GLUTILS_ORANGE = ns_hex_string_to_vec("ffa500");
 
-extern void Printf(char *Format, ...);
+internal void Printf(char *Format, ...);
 
 struct render_objects
 {
