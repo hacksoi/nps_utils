@@ -3,8 +3,8 @@
 
 #include "glcorearb.h"
 
-#include "common.h"
-#include "glutils_error.h"
+#include "ns_common.h"
+#include "ns_glutils_error.h"
 
 PFNGLATTACHSHADERPROC glAttachShader;
 PFNGLBINDBUFFERPROC glBindBuffer;

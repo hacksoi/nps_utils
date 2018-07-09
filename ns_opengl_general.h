@@ -1,18 +1,20 @@
 #ifndef OPENGL_WRAPPERS_H
 #define OPENGL_WRAPPERS_H
 
-#include "glutils_error.h"
-#include "opengl_functions.h"
-#include "nps_math.h"
+#include "ns_common.h"
+#include "ns_glutils_error.h"
+#include "ns_opengl_functions.h"
+#include "ns_game_math.h"
+#include "ns_util.h"
 
 global v4 GLUTILS_RED = {1.0f, 0.0f, 0.0f, 1.0f};
 global v4 GLUTILS_GREEN = {0.0f, 1.0f, 0.0f, 1.0f};
 global v4 GLUTILS_BLUE = {0.0f, 0.0f, 1.0f, 1.0f};
 global v4 GLUTILS_CYAN = {0.0f, 1.0f, 1.0f, 1.0f};
 global v4 GLUTILS_YELLOW = {1.0f, 1.0f, 0.0f, 1.0f};
-global v4 GLUTILS_ORANGE = FromHexColor("ffa500");
+global v4 GLUTILS_ORANGE = ns_hex_string_to_vec("ffa500");
 
-extern void Printf(char *Format, ...);
+internal void Printf(char *Format, ...);
 
 struct render_objects
 {
