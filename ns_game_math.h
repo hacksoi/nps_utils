@@ -16,6 +16,7 @@ union v2
     inline float &operator[](int ComponentIdx);
     inline void operator+=(v2 A);
     inline void operator-=(v2 A);
+    inline void operator*=(float A);
 };
 
 union v3
@@ -240,6 +241,13 @@ v3::operator+=(v3 A)
     this->X += A.X;
     this->Y += A.Y;
     this->Z += A.Z;
+}
+
+inline void
+v2::operator*=(float A)
+{
+    this->X *= A;
+    this->Y *= A;
 }
 
 inline void
@@ -935,7 +943,9 @@ inline internal v2
 GetNormal(line2 Line)
 {
     v2 OriginVector = Line.P2 - Line.P1;
-    v2 LineNormal = Normalize(Rotate90CCW(OriginVector));
+    v2 Rotated = Rotate90CCW(OriginVector);
+    v2 LineNormal = Normalize(Rotated);
+    Assert(LineNormal.X == LineNormal.X && LineNormal.Y == LineNormal.Y);
     return LineNormal;
 }
 
@@ -995,6 +1005,14 @@ GetDistance(v2 P, line2 Line)
     v2 ClosestPointOnLine = Line.P1 + t*LineDir;
     float DistanceToLine = GetLength(P - ClosestPointOnLine);
     return DistanceToLine;
+}
+
+internal v2
+GetDirection(line2 Line)
+{
+    v2 Direction = Line.P2 - Line.P1;
+    Normalize(&Direction);
+    return Direction;
 }
 
 /* Intersections */

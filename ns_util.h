@@ -49,14 +49,14 @@ void ns_put16be(uint8_t *dest, uint16_t src)
 
 void ns_put64be(uint8_t *dest, uint64_t src)
 {
-    dest[0] = ((src & 0xff00000000000000) >> 56);
-    dest[1] = ((src & 0x00ff000000000000) >> 48);
-    dest[2] = ((src & 0x0000ff0000000000) >> 40);
-    dest[3] = ((src & 0x000000ff00000000) >> 32);
-    dest[4] = ((src & 0x00000000ff000000) >> 24);
-    dest[5] = ((src & 0x0000000000ff0000) >> 16);
-    dest[6] = ((src & 0x000000000000ff00) >>  8);
-    dest[7] = ((src & 0x00000000000000ff) >>  0);
+    dest[0] = (uint8_t)((src & 0xff00000000000000) >> 56);
+    dest[1] = (uint8_t)((src & 0x00ff000000000000) >> 48);
+    dest[2] = (uint8_t)((src & 0x0000ff0000000000) >> 40);
+    dest[3] = (uint8_t)((src & 0x000000ff00000000) >> 32);
+    dest[4] = (uint8_t)((src & 0x00000000ff000000) >> 24);
+    dest[5] = (uint8_t)((src & 0x0000000000ff0000) >> 16);
+    dest[6] = (uint8_t)((src & 0x000000000000ff00) >>  8);
+    dest[7] = (uint8_t)((src & 0x00000000000000ff) >>  0);
 }
 
 /* Hex */
@@ -95,9 +95,8 @@ inline internal int ns_hex_to_int(char *HexString, uint64_t Length = 0)
     return Result;
 }
 
-#if 0
 /* i.e. "FFFFFF" to (1, 1, 1, 1) */
-inline internal v4 ns_from_hex_color(char *HexString)
+inline internal v4 ns_hex_string_to_vec(char *HexString)
 {
     Assert(strlen(HexString) == 6);
 
@@ -110,13 +109,12 @@ inline internal v4 ns_from_hex_color(char *HexString)
     Result[3] = 1.0f;
     return Result;
 }
-#endif
 
 /* Base64 */
 
 inline char ns_to_base64(int Value)
 {
-    char Result;
+    int Result;
     if(Value <= 25)
     {
         Result = 'A' + Value;
@@ -141,7 +139,7 @@ inline char ns_to_base64(int Value)
     {
         Result = -1;
     }
-    return Result;
+    return (char)Result;
 }
 
 #endif

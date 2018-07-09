@@ -3,8 +3,8 @@
 
 #include "glcorearb.h"
 
-#include "common.h"
-#include "glutils_error.h"
+#include "ns_common.h"
+#include "ns_glutils_error.h"
 
 PFNGLATTACHSHADERPROC glAttachShader;
 PFNGLBINDBUFFERPROC glBindBuffer;
@@ -66,6 +66,8 @@ PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers;
 PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
 PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
 PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
+PFNGLBUFFERSUBDATAPROC glBufferSubData;
+PFNGLGETERRORPROC glGetError;
 
 internal void *
 GetGLFunctionAddress(const char *FunctionName)
@@ -152,7 +154,9 @@ LoadOpenGLFunctions()
        (glGenFramebuffers = (PFNGLGENFRAMEBUFFERSPROC)GetGLFunctionAddress("glGenFramebuffers")) == (void *)0 ||
        (glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)GetGLFunctionAddress("glBindFramebuffer")) == (void *)0 ||
        (glFramebufferTexture2D = (PFNGLFRAMEBUFFERTEXTURE2DPROC)GetGLFunctionAddress("glFramebufferTexture2D")) == (void *)0 ||
-       (glCheckFramebufferStatus = (PFNGLCHECKFRAMEBUFFERSTATUSPROC)GetGLFunctionAddress("glCheckFramebufferStatus")) == (void *)0
+       (glCheckFramebufferStatus = (PFNGLCHECKFRAMEBUFFERSTATUSPROC)GetGLFunctionAddress("glCheckFramebufferStatus")) == (void *)0 ||
+       (glBufferSubData = (PFNGLBUFFERSUBDATAPROC)GetGLFunctionAddress("glBufferSubData")) == (void *)0 ||
+       (glGetError = (PFNGLGETERRORPROC)GetGLFunctionAddress("glGetError")) == (void *)0
        )
     {
         return false;
