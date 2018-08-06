@@ -79,7 +79,7 @@ inline internal int ns_hex_to_int(char HexChar)
     return Result;
 }
 
-inline internal int ns_hex_to_int(char *HexString, uint64_t Length = 0)
+inline internal int ns_hex_to_int(const char *HexString, uint64_t Length = 0)
 {
     if(Length == 0)
     {
@@ -96,14 +96,14 @@ inline internal int ns_hex_to_int(char *HexString, uint64_t Length = 0)
 }
 
 /* i.e. "FFFFFF" to (1, 1, 1, 1) */
-inline internal v4 ns_hex_string_to_vec(char *HexString)
+inline internal v4 ns_hex_string_to_vec(const char *HexString)
 {
     Assert(strlen(HexString) == 6);
 
     v4 Result;
     for(int i = 0; i < 3; i++)
     {
-        char *ColorValue = &HexString[2*i];
+        const char *ColorValue = &HexString[2*i];
         Result[i] = (ns_hex_to_int(ColorValue, 2) / 255.0f);
     }
     Result[3] = 1.0f;

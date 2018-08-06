@@ -1,20 +1,10 @@
-#ifndef OPENGL_WRAPPERS_H
-#define OPENGL_WRAPPERS_H
+#ifndef NS_OPENGL_H
+#define NS_OPENGL_H
 
 #include "ns_common.h"
-#include "ns_glutils_error.h"
 #include "ns_opengl_functions.h"
 #include "ns_game_math.h"
 #include "ns_util.h"
-
-global v4 GLUTILS_RED = {1.0f, 0.0f, 0.0f, 1.0f};
-global v4 GLUTILS_GREEN = {0.0f, 1.0f, 0.0f, 1.0f};
-global v4 GLUTILS_BLUE = {0.0f, 0.0f, 1.0f, 1.0f};
-global v4 GLUTILS_CYAN = {0.0f, 1.0f, 1.0f, 1.0f};
-global v4 GLUTILS_YELLOW = {1.0f, 1.0f, 0.0f, 1.0f};
-global v4 GLUTILS_ORANGE = ns_hex_string_to_vec("ffa500");
-
-internal void Printf(char *Format, ...);
 
 struct render_objects
 {
@@ -26,6 +16,25 @@ struct framebuffer
 {
     uint32_t Fbo, Texture, Rbo;
 };
+
+global v4 GLUTILS_WHITE = {1.0f, 1.0f, 1.0f, 1.0f};
+global v4 GLUTILS_BLACK = {0.0f, 0.0f, 0.0f, 1.0f};
+global v4 GLUTILS_RED = {1.0f, 0.0f, 0.0f, 1.0f};
+global v4 GLUTILS_GREEN = {0.0f, 1.0f, 0.0f, 1.0f};
+global v4 GLUTILS_BLUE = {0.0f, 0.0f, 1.0f, 1.0f};
+global v4 GLUTILS_CYAN = {0.0f, 1.0f, 1.0f, 1.0f};
+global v4 GLUTILS_YELLOW = {1.0f, 1.0f, 0.0f, 1.0f};
+global v4 GLUTILS_ORANGE = ns_hex_string_to_vec("ffa500");
+
+// The default calling convention is __cdecl. Unfortunately, the OpenGL functions are defined
+typedef void __stdcall opengl_get_error_info(GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog); // i.e. glGetShaderInfoLog()
+inline internal void
+LogErrorMessageFromGLInfoFunc(uint32_t OpenGLObject, opengl_get_error_info OpenGLGetErrorInfo, const char *ExitMessage)
+{
+    char Buffer[512];
+    OpenGLGetErrorInfo(OpenGLObject, (GLsizei)(sizeof(Buffer) - 1), NULL, Buffer);
+    Log("%s: %s", ExitMessage, Buffer);
+}
 
 internal uint32_t
 CreateAndBindVertexBuffer()
@@ -79,7 +88,7 @@ CreateShader(GLenum ShaderType, const char *ShaderSource)
     glGetShaderiv(Shader, GL_COMPILE_STATUS, &DidCompileSuccessfully);
     if(!DidCompileSuccessfully)
     {
-        char *ErrorMessage;
+        const char *ErrorMessage;
         switch(ShaderType)
         {
             case GL_VERTEX_SHADER:
@@ -102,8 +111,7 @@ CreateShader(GLenum ShaderType, const char *ShaderSource)
                 ErrorMessage = "error compiling unknown shader type: \n";
             } break;
         }
-        SetErrorMessageFromGLInfoFunc(Shader, glGetShaderInfoLog, ErrorMessage);
-        Printf(GetGlutilsErrorMessage());
+        LogErrorMessageFromGLInfoFunc(Shader, glGetShaderInfoLog, ErrorMessage);
         Shader = 0;
     }
     Assert(Shader != 0);
@@ -130,9 +138,7 @@ CreateShaderProgramVF(const char *VertexShaderSource, const char *FragmentShader
             glGetProgramiv(ShaderProgram, GL_LINK_STATUS, &DidProgramLinkSuccessfully);
             if(!DidProgramLinkSuccessfully)
             {
-                SetErrorMessageFromGLInfoFunc(ShaderProgram, glGetProgramInfoLog, 
-                                              "Error linking shader program: \n");
-                Printf(GetGlutilsErrorMessage());
+                LogErrorMessageFromGLInfoFunc(ShaderProgram, glGetProgramInfoLog, "Error linking shader program: \n");
                 glDeleteProgram(ShaderProgram);
                 ShaderProgram = 0;
             }
@@ -170,8 +176,7 @@ CreateShaderProgramVGF(const char *VertexShaderSource, const char *GeometryShade
                 glGetProgramiv(ShaderProgram, GL_LINK_STATUS, &DidProgramLinkSuccessfully);
                 if(!DidProgramLinkSuccessfully)
                 {
-                    SetErrorMessageFromGLInfoFunc(ShaderProgram, glGetProgramInfoLog, 
-                                                  "Error linking shader program: \n");
+                    LogErrorMessageFromGLInfoFunc(ShaderProgram, glGetProgramInfoLog, "Error linking shader program: \n");
                     glDeleteProgram(ShaderProgram);
                     ShaderProgram = 0;
                 }
@@ -199,23 +204,27 @@ SetVertexAttributeFloat(uint32_t VertexAttributeIndex, uint32_t ElementsPerAttri
 inline internal void
 InsertQuad(quad2 Quad, float *VertexData, int *VertexDataCount)
 {
-    VertexData[(*VertexDataCount)++] = Quad.BottomLeft.X;
-    VertexData[(*VertexDataCount)++] = Quad.BottomLeft.Y;
-                
-    VertexData[(*VertexDataCount)++] = Quad.BottomRight.X;
-    VertexData[(*VertexDataCount)++] = Quad.BottomRight.Y;
-                
-    VertexData[(*VertexDataCount)++] = Quad.TopRight.X;
-    VertexData[(*VertexDataCount)++] = Quad.TopRight.Y;
-                
-    VertexData[(*VertexDataCount)++] = Quad.BottomLeft.X;
-    VertexData[(*VertexDataCount)++] = Quad.BottomLeft.Y;
-                
-    VertexData[(*VertexDataCount)++] = Quad.TopRight.X;
-    VertexData[(*VertexDataCount)++] = Quad.TopRight.Y;
-                
-    VertexData[(*VertexDataCount)++] = Quad.TopLeft.X;
-    VertexData[(*VertexDataCount)++] = Quad.TopLeft.Y;
+    {
+        VertexData[(*VertexDataCount)++] = Quad.BottomLeft.X;
+        VertexData[(*VertexDataCount)++] = Quad.BottomLeft.Y;
+
+        VertexData[(*VertexDataCount)++] = Quad.BottomRight.X;
+        VertexData[(*VertexDataCount)++] = Quad.BottomRight.Y;
+
+        VertexData[(*VertexDataCount)++] = Quad.TopRight.X;
+        VertexData[(*VertexDataCount)++] = Quad.TopRight.Y;
+    }
+
+    {
+        VertexData[(*VertexDataCount)++] = Quad.BottomLeft.X;
+        VertexData[(*VertexDataCount)++] = Quad.BottomLeft.Y;
+                    
+        VertexData[(*VertexDataCount)++] = Quad.TopRight.X;
+        VertexData[(*VertexDataCount)++] = Quad.TopRight.Y;
+                    
+        VertexData[(*VertexDataCount)++] = Quad.TopLeft.X;
+        VertexData[(*VertexDataCount)++] = Quad.TopLeft.Y;
+    }
 }
 
 inline internal void

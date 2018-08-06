@@ -1,8 +1,8 @@
 #ifndef NS_GAME_MATH_H
 #define NS_GAME_MATH_H
 
+#include "ns_common.h"
 #include "ns_math.h"
-
 
 union v2
 {
@@ -304,7 +304,14 @@ inline internal bool
 operator==(v2 Left, v2 Right)
 {
     bool Result = (Left.X == Right.X &&
-                     Left.Y == Right.Y);
+                   Left.Y == Right.Y);
+    return Result;
+}
+
+inline internal bool
+IsWithinTolerance(v2 A, v2 B)
+{
+    bool Result = IsWithinTolerance(A.X, B.X) && IsWithinTolerance(A.Y, B.Y);
     return Result;
 }
 
@@ -969,7 +976,7 @@ CreateLineQuad(line2 Line, float Width)
 {
     Assert(Line.P1 != Line.P2);
 
-    float HalfWidth = Width / 2.0f;
+    float HalfWidth = Width/2.0f;
 
     v2 Normal = GetNormal(Line);
 
@@ -980,6 +987,13 @@ CreateLineQuad(line2 Line, float Width)
     Result.TopLeft = Line.P1 + HalfWidth*Normal;
 
     return Result;
+}
+
+internal v2
+GetPointAtPercentage(line2 Line, float Percentage)
+{
+    v2 Point = Lerp(Line.P1, Percentage, Line.P2);
+    return Point;
 }
 
 /* Calculates the value of P projected onto the line. */
@@ -1164,6 +1178,27 @@ DoesIntersect(line2 A, line2 B)
 {
     bool Result = FindIntersection(A, B, 0);
     return Result;
+}
+
+/* Print functions. */
+
+internal void Printf(v2 V, bool NewLine = true)
+{
+    if (NewLine)
+    {
+        Printf("{ %f, %f }\n", V.X, V.Y);
+    }
+    else
+    {
+        Printf("{ %f, %f }", V.X, V.Y);
+    }
+}
+
+internal void Printf(line2 Line)
+{
+    Printf(Line.P1, false);
+    Printf(", ");
+    Printf(Line.P2, true);
 }
 
 #endif

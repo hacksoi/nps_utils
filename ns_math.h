@@ -20,6 +20,45 @@
 #define EXPANDV3(V) V.X, V.Y, V.Z
 #define EXPANDV4(V) V.X, V.Y, V.Z, V.W
 
+struct Complex
+{
+    float Real;
+    float Imaginary;
+};
+
+internal Complex 
+COMPLEX(float Real, float Imaginary)
+{
+    Complex Result = { Real, Imaginary };
+    return Result;
+}
+
+internal Complex
+operator+(Complex A, Complex B)
+{
+    Complex Result;
+    Result.Real = A.Real + B.Real;
+    Result.Imaginary = A.Imaginary + B.Imaginary;
+    return Result;
+}
+
+internal Complex
+operator-(Complex A, Complex B)
+{
+    Complex Result;
+    Result.Real = A.Real + B.Real;
+    Result.Imaginary = A.Imaginary + B.Imaginary;
+    return Result;
+}
+
+internal Complex
+operator*(Complex A, Complex B)
+{
+    Complex Result;
+    Result.Real = A.Real * B.Real;
+    Result.Imaginary = A.Imaginary * B.Imaginary;
+    return Result;
+}
 
 inline internal float
 ToRadians(float Degrees)
@@ -53,6 +92,13 @@ inline internal float
 Cos(float Radians)
 {
     float Result = cosf(Radians);
+    return Result;
+}
+
+inline internal float
+Exp(float X)
+{
+    float Result = expf(X);
     return Result;
 }
 
@@ -144,9 +190,16 @@ ns_math_max(uint32_t A, uint32_t B)
 }
 
 inline internal float
-ns_math_min(float A, float B)
+Min(float A, float B)
 {
     float Result = A < B ? A : B;
+    return Result;
+}
+
+inline internal float
+ns_math_min(float A, float B)
+{
+    float Result = Min(A, B);
     return Result;
 }
 
@@ -155,6 +208,64 @@ ns_math_max(float A, float B)
 {
     float Result = A > B ? A : B;
     return Result;
+}
+
+inline internal float
+Log10f(float X)
+{
+    float Result = log10f(X);
+    return Result;
+}
+
+inline internal float
+Log2f(float X)
+{
+    float Result = log2f(X);
+    return Result;
+}
+
+internal Complex
+EulerFormula(float X)
+{
+    Complex Result;
+    Result.Real = Cos(X);
+    Result.Imaginary = Sin(X);
+    return Result;
+}
+
+/* If it's already a POT, returns Value. */
+internal int
+NextPowerOfTwo(int Value)
+{
+    int NumBits = 8*sizeof(Value);
+    for (int Bit = 0; Bit < NumBits; Bit++)
+    {
+        int POT = 1 << Bit;
+        if (Value <= POT)
+        {
+            return POT;
+        }
+    }
+
+    /* Should never get here. */
+    Assert(false);
+    return -1;
+}
+
+internal void 
+Swap(uint8_t *A, uint8_t *B)
+{
+    uint8_t Tmp = *A;
+    *A = *B;
+    *B = Tmp;
+}
+
+internal void 
+ReverseEndianness(uint32_t *_Value)
+{
+    uint8_t *Value = (uint8_t *)_Value;
+    Swap(Value + 0, Value + 3);
+    Swap(Value + 1, Value + 2);
 }
 
 #endif

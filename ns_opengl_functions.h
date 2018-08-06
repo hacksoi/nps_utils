@@ -1,10 +1,10 @@
-#ifndef OPENGL_FUNCTIONS_H
-#define OPENGL_FUNCTIONS_H
+#ifndef NS_OPENGL_FUNCTIONS_H
+#define NS_OPENGL_FUNCTIONS_H
 
 #include "glcorearb.h"
+#include "wglext.h"
 
 #include "ns_common.h"
-#include "ns_glutils_error.h"
 
 PFNGLATTACHSHADERPROC glAttachShader;
 PFNGLBINDBUFFERPROC glBindBuffer;
@@ -84,7 +84,7 @@ GetGLFunctionAddress(const char *FunctionName)
         FunctionAddress = (void *)GetProcAddress(OpenGLDLLHandle, FunctionName);
         if(FunctionAddress == 0)
         {
-            SetGlutilsErrorMessage("could not load opengl function: %s\n", FunctionName);
+            Log("could not load opengl function: %s\n", FunctionName);
         }
     }
     return FunctionAddress;

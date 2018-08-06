@@ -13,7 +13,8 @@ ns_string_get_token(char *dst, char *src, int dst_size, char delimiter = ' ')
 {
     int len = 0;
     while(src[len] &&
-          src[len] != delimiter)
+          src[len] != delimiter &&
+          dst_size)
     {
         dst[len] = src[len];
         len++;

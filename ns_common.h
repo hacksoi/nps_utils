@@ -55,4 +55,56 @@
 //#define Assert(Expression) if(!(Expression)) *(int *)0 = 0;
 #define Assert(Expression) assert(Expression);
 
+#define Log(Format, ...) _Log("%s line %d. " Format, __FILE__, __LINE__, __VA_ARGS__)
+internal void _Log(const char *Format, ...);
+
+#define Check(ToCheck) \
+    if(!(ToCheck)) \
+    { \
+        Log("Error\n"); \
+        Assert(ToCheck); \
+    }
+
+#define CheckR1(ToCheck) \
+    if(!(ToCheck)) \
+    { \
+        Log("Error\n"); \
+        Assert(ToCheck); \
+        return 1; \
+    }
+
+#define CheckRN(ToCheck) \
+    if(!(ToCheck)) \
+    { \
+        Log("Error\n"); \
+        Assert(ToCheck); \
+        return NULL; \
+    }
+
+#define CheckRR(ToCheck) \
+    if(!(ToCheck)) \
+    { \
+        Log("Error\n"); \
+        Assert(ToCheck); \
+        return Result; \
+    }
+
+internal void Printf(const char *Format, ...);
+internal void Printf(int Value);
+internal void Printf(float Value);
+
+internal void *
+Malloc(int Size)
+{
+    void *Result = malloc(Size);
+    return Result;
+}
+
+internal void *
+MallocZero(int Size)
+{
+    void *Result = calloc(1, Size);
+    return Result;
+}
+
 #endif
