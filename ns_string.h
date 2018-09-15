@@ -9,6 +9,20 @@
 /* API */
 
 int
+StrLen(char *String)
+{
+    int Result = (int)strlen(String);
+    return Result;
+}
+
+int
+StrCmp(char *String1, char *String2)
+{
+    int Result = strcmp(String1, String2);
+    return Result;
+}
+
+int
 ns_string_get_token(char *dst, char *src, int dst_size, char delimiter = ' ')
 {
     int len = 0;

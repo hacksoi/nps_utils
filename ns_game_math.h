@@ -161,10 +161,23 @@ struct tri2
 
 /* Vectors */
 
+internal void
+Print(v2 V)
+{
+    Printf("%f, %f\n", V.X, V.Y);
+}
+
 inline internal v2
 V2(float X, float Y)
 {
     v2 Result = {X, Y};
+    return Result;
+}
+
+inline internal v2
+V2(int X, int Y)
+{
+    v2 Result = V2((float)X, (float)Y);
     return Result;
 }
 
@@ -301,25 +314,16 @@ operator/(v3 V, float S)
 }
 
 inline internal bool
-operator==(v2 Left, v2 Right)
-{
-    bool Result = (Left.X == Right.X &&
-                   Left.Y == Right.Y);
-    return Result;
-}
-
-inline internal bool
-IsWithinTolerance(v2 A, v2 B)
+operator==(v2 A, v2 B)
 {
     bool Result = IsWithinTolerance(A.X, B.X) && IsWithinTolerance(A.Y, B.Y);
     return Result;
 }
 
 inline internal bool
-operator!=(v2 Left, v2 Right)
+operator!=(v2 A, v2 B)
 {
-    bool Result = (Left.X != Right.X ||
-                     Left.Y != Right.Y);
+    bool Result = !(A == B);
     return Result;
 }
 
@@ -533,6 +537,42 @@ Rotate(v3 *Vector, v3 Axis, float RotationDegrees)
 
     quaternion RotQuat = {SinHalfAngle*Axis, CosHalfAngle};
     Rotate(Vector, RotQuat);
+}
+
+inline internal v2
+Bezier(v2 A, v2 B, v2 C, float t)
+{
+    float t2 = t*t;
+    float mt = 1 - t;
+    float mt2 = mt*mt;
+    v2 Result = mt2*A + 2*mt*t*B + t2*C;
+    return Result;
+}
+
+inline internal v2
+Bezier(v2 A, v2 B, v2 C, v2 D, float t)
+{
+    float t2 = t*t;
+    float t3 = t*t2;
+    float mt = 1 - t;
+    float mt2 = mt*mt;
+    float mt3 = mt*mt2;
+    v2 Result = mt3*A + 3*mt2*t*B + 3*mt*t2*C + t3*D;
+    return Result;
+}
+
+inline internal v2
+Bezier(v2 A, v2 B, v2 C, v2 D, v2 E, float t)
+{
+    float t2 = t*t;
+    float t3 = t*t2;
+    float t4 = t*t3;
+    float mt = 1 - t;
+    float mt2 = mt*mt;
+    float mt3 = mt*mt2;
+    float mt4 = mt*mt3;
+    v2 Result = mt4*A + 4*mt3*t*B + 6*mt2*t2*C + 4*mt*t3*D + t4*E;
+    return Result;
 }
 
 /* Matrices */
@@ -855,6 +895,30 @@ GetSignedArea(v2 A, v2 B, v2 C)
 
 /* Quads */
 
+#if 0
+internal quad2
+operator*(float A, quad2 B)
+{
+    quad2 Result = {};
+    Result.BottomLeft = A*B.BottomLeft;
+    Result.BottomRight = A*B.BottomRight;
+    Result.TopRight = A*B.TopRight;
+    Result.TopLeft = A*B.TopLeft;
+    return Result;
+}
+#endif
+
+internal quad2
+QUAD2(rect2 Rect)
+{
+    quad2 Result;
+    Result.BottomLeft = Rect.Min;
+    Result.BottomRight = V2(Rect.Max.X, Rect.Min.Y);
+    Result.TopRight = Rect.Max;
+    Result.TopLeft = V2(Rect.Min.X, Rect.Max.Y);
+    return Result;
+}
+
 inline v3
 quad2_3d::operator[](int CornerIdx)
 {
@@ -888,6 +952,24 @@ GetPlaneCorners(plane Plane, float Size)
 /* Rectangles */
 
 internal rect2
+RECT2(v2 Min, v2 Max)
+{
+    rect2 Result;
+    Result.Min = Min;
+    Result.Max = Max;
+    return Result;
+}
+
+internal rect2
+operator*(float A, rect2 B)
+{
+    rect2 Result;
+    Result.Min = A*B.Min;
+    Result.Max = A*B.Max;
+    return Result;
+}
+
+internal rect2
 RectFromPosSize(v2 Position, v2 Size)
 {
     rect2 Result = {
@@ -897,11 +979,22 @@ RectFromPosSize(v2 Position, v2 Size)
     return Result;
 }
 
+internal quad2
+QuadFromPosSize(v2 Position, v2 Size)
+{
+    v2 BottomLeft = { Position.X, Position.Y };
+    v2 BottomRight = BottomLeft + V2(Size.X, 0.0f);
+    v2 TopLeft = BottomLeft + V2(0.0f, Size.Y);
+    v2 TopRight = BottomLeft + Size;
+    quad2 Result = { BottomLeft, BottomRight, TopRight, TopLeft };
+    return Result;
+}
+
 internal bool
 IsInsideRectangle(v2 Point, rect2 Rectangle)
 {
     bool Result = (Point.X >= Rectangle.Min.X && Point.X <= Rectangle.Max.X &&
-                     Point.Y >= Rectangle.Min.Y && Point.Y <= Rectangle.Max.Y);
+                   Point.Y >= Rectangle.Min.Y && Point.Y <= Rectangle.Max.Y);
     return Result;
 }
 
@@ -913,13 +1006,56 @@ GetPos(rect2 Rect)
 }
 
 internal v2
-GetSize(rect2 Rect)
+GetSize(rect2 *Rect)
 {
     v2 Result = {
-        Rect.Max.X - Rect.Min.X + 1,
-        Rect.Max.Y - Rect.Min.Y + 1,
+        Rect->Max.X - Rect->Min.X + 1,
+        Rect->Max.Y - Rect->Min.Y + 1,
     };
     return Result;
+}
+
+internal v2
+GetSize(rect2 Rect)
+{
+    v2 Result = GetSize(&Rect);
+    return Result;
+}
+
+internal v2
+GetDim(rect2 Rect)
+{
+    v2 Result = GetSize(&Rect);
+    return Result;
+}
+
+internal v2
+GetDim(rect2 *Rect)
+{
+    v2 Result = GetSize(Rect);
+    return Result;
+}
+
+internal v2
+GetCenter(rect2 *Rect)
+{
+    v2 Result = Rect->Min + 0.5f*(Rect->Max - Rect->Min);
+    return Result;
+}
+
+internal void
+Scale(rect2 *Rect, float Scale)
+{
+    v2 Center = GetCenter(Rect);
+
+    Rect->Min -= Center;
+    Rect->Max -= Center;
+
+    Rect->Min *= Scale;
+    Rect->Max *= Scale;
+
+    Rect->Min += Center;
+    Rect->Max += Center;
 }
 
 /* Lines */
@@ -1180,6 +1316,13 @@ DoesIntersect(line2 A, line2 B)
     return Result;
 }
 
+internal bool
+Intersects(line2 A, line2 B)
+{
+    bool Result = FindIntersection(A, B, 0);
+    return Result;
+}
+
 /* Print functions. */
 
 internal void Printf(v2 V, bool NewLine = true)
@@ -1199,6 +1342,16 @@ internal void Printf(line2 Line)
     Printf(Line.P1, false);
     Printf(", ");
     Printf(Line.P2, true);
+}
+
+internal void
+Print(quad2 Quad)
+{
+    Printf("Quad:\n");
+    Print(Quad.BottomLeft);
+    Print(Quad.BottomRight);
+    Print(Quad.TopRight);
+    Print(Quad.TopLeft);
 }
 
 #endif

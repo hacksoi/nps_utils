@@ -68,6 +68,7 @@ PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
 PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
 PFNGLBUFFERSUBDATAPROC glBufferSubData;
 PFNGLGETERRORPROC glGetError;
+PFNGLDELETETEXTURESPROC glDeleteTextures;
 
 internal void *
 GetGLFunctionAddress(const char *FunctionName)
@@ -156,7 +157,8 @@ LoadOpenGLFunctions()
        (glFramebufferTexture2D = (PFNGLFRAMEBUFFERTEXTURE2DPROC)GetGLFunctionAddress("glFramebufferTexture2D")) == (void *)0 ||
        (glCheckFramebufferStatus = (PFNGLCHECKFRAMEBUFFERSTATUSPROC)GetGLFunctionAddress("glCheckFramebufferStatus")) == (void *)0 ||
        (glBufferSubData = (PFNGLBUFFERSUBDATAPROC)GetGLFunctionAddress("glBufferSubData")) == (void *)0 ||
-       (glGetError = (PFNGLGETERRORPROC)GetGLFunctionAddress("glGetError")) == (void *)0
+       (glGetError = (PFNGLGETERRORPROC)GetGLFunctionAddress("glGetError")) == (void *)0 ||
+       (glDeleteTextures = (PFNGLDELETETEXTURESPROC)GetGLFunctionAddress("glDeleteTextures")) == (void *)0
        )
     {
         return false;

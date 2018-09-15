@@ -1,10 +1,14 @@
 #ifndef NS_SHAPE_RENDERER_H
 #define NS_SHAPE_RENDERER_H
 
-#include "ns_common.h"
+#include "ns_common_renderer.h"
 #include "ns_opengl_functions.h"
+#include "ns_common.h"
 
-#define SHAPE_RENDERER_CAPACITY_BYTES (1024*1024)
+#define SHAPE_RENDERER_MAX_VERTICES 4096
+#define SHAPE_RENDERER_FLOATS_PER_VERTEX 6
+#define SHAPE_RENDERER_BYTES_PER_VERTEX (sizeof(float)*SHAPE_RENDERER_FLOATS_PER_VERTEX)
+#define SHAPE_RENDERER_CAPACITY_BYTES (SHAPE_RENDERER_MAX_VERTICES*SHAPE_RENDERER_BYTES_PER_VERTEX)
 
 enum shape_type
 {
@@ -12,6 +16,7 @@ enum shape_type
     ShapeType_Point,
     ShapeType_Line,
     ShapeType_Triangle,
+    ShapeType_Triangle_Fan,
     ShapeType_NumTypes,
 };
 
@@ -21,47 +26,12 @@ struct shape_renderer_group
     uint32_t NumElements;
 };
 
-#pragma pack(push, 1)
-struct shape_renderer_point
-{
-    float X, Y;
-    float R, G, B, A;
-};
-
-struct shape_renderer_line
-{
-    float X1, Y1;
-    float R1, G1, B1, A1;
-
-    float X2, Y2;
-    float R2, G2, B2, A2;
-};
-
-struct shape_renderer_triangle
-{
-    float X1, Y1;
-    float R1, G1, B1, A1;
-
-    float X2, Y2;
-    float R2, G2, B2, A2;
-
-    float X3, Y3;
-    float R3, G3, B3, A3;
-};
-#pragma pack(pop)
-
 struct shape_renderer
 {
-    uint32_t WindowWidth;
-    uint32_t WindowHeight;
+    common_renderer Common;
 
-    uint32_t ShaderProgram;
-    uint32_t Vbo;
-    uint32_t Vao;
-
-    uint8_t *VertexData;
     shape_type CurrentType;
-    uint8_t *InsertionPoint;
+    float *InsertionPoint;
     uint32_t NumVertices;
     float PointSize;
     float LineWidth;
@@ -72,67 +42,63 @@ struct shape_renderer
 internal void
 Reset(shape_renderer *ShapeRenderer)
 {
-    ShapeRenderer->InsertionPoint = ShapeRenderer->VertexData;
+    ShapeRenderer->InsertionPoint = (float *)ShapeRenderer->Common.VertexData;
     ShapeRenderer->NumVertices = 0;
 }
 
-internal bool
-Initialize(shape_renderer *ShapeRenderer, uint32_t WindowWidth, uint32_t WindowHeight)
+internal shape_renderer
+CreateShapeRenderer(uint32_t WindowWidth, uint32_t WindowHeight)
 {
-    ShapeRenderer->WindowWidth = WindowWidth;
-    ShapeRenderer->WindowHeight = WindowHeight;
+    shape_renderer Result;
 
-    ShapeRenderer->VertexData = (uint8_t *)malloc(SHAPE_RENDERER_CAPACITY_BYTES);
-    ShapeRenderer->CurrentType = ShapeType_None;
-    ShapeRenderer->IsWireframe = false;
-    Reset(ShapeRenderer);
+    const char *VertexShaderSource = R"STR(
+        #version 330 core
+        layout(location = 0) in vec2 Pos;
+        layout(location = 1) in vec4 vsColor;
 
-const char *VertexShaderSource = R"STR(
-    #version 330 core
-    layout(location = 0) in vec2 Pos;
-    layout(location = 1) in vec4 vsColor;
+        uniform vec2 WindowDimensions;
 
-    uniform vec2 WindowDimensions;
+        out vec4 fsColor;
 
-    out vec4 fsColor;
+        void main()
+        {
+            vec2 ClipPos = ((2.0f * Pos) / WindowDimensions) - 1.0f;
+            gl_Position = vec4(ClipPos, 0.0, 1.0f);
 
-    void main()
-    {
-        vec2 ClipPos = ((2.0f * Pos) / WindowDimensions) - 1.0f;
-        gl_Position = vec4(ClipPos, 0.0, 1.0f);
+            fsColor = vsColor;
+        }
+        )STR";
 
-        fsColor = vsColor;
-    }
-    )STR";
+    const char *FragmentShaderSource = R"STR(
+        #version 330 core
+        in vec4 fsColor;
 
-const char *FragmentShaderSource = R"STR(
-    #version 330 core
-    in vec4 fsColor;
+        out vec4 OutputColor;
 
-    out vec4 OutputColor;
+        void main()
+        {
+            OutputColor = fsColor;
+        }
+        )STR";
 
-    void main()
-    {
-        OutputColor = fsColor;
-    }
-    )STR";
-
-    ShapeRenderer->ShaderProgram = CreateShaderProgramVF(VertexShaderSource, FragmentShaderSource);
-    if(ShapeRenderer->ShaderProgram == 0)
-    {
-        return false;
-    }
-    ShapeRenderer->Vbo = CreateAndBindVertexBuffer();
-    ShapeRenderer->Vao = CreateAndBindVertexArray();
+    Result.Common = CreateCommonRenderer(WindowWidth, WindowHeight, SHAPE_RENDERER_CAPACITY_BYTES, VertexShaderSource, FragmentShaderSource);
+    Result.Common.Vbo = CreateAndBindVertexBuffer();
+    Result.Common.Vao = CreateAndBindVertexArray();
     SetVertexAttributeFloat(0, 2, 6, 0);
     SetVertexAttributeFloat(1, 4, 6, 2);
-    return true;
+    glBindVertexArray(0);
+
+    Result.CurrentType = ShapeType_None;
+    Result.IsWireframe = false;
+    Reset(&Result);
+
+    return Result;
 }
 
-inline internal uint32_t
+internal uint32_t
 GetBytesUsed(shape_renderer *ShapeRenderer)
 {
-    uint64_t Result = (uint64_t)(ShapeRenderer->InsertionPoint - ShapeRenderer->VertexData);
+    uint64_t Result = (uint64_t)((uint8_t *)ShapeRenderer->InsertionPoint - (uint8_t *)ShapeRenderer->Common.VertexData);
     Assert(Result == (uint32_t)Result);
     return (uint32_t)Result;
 }
@@ -140,45 +106,48 @@ GetBytesUsed(shape_renderer *ShapeRenderer)
 internal void
 Flush(shape_renderer *ShapeRenderer)
 {
-    glBindVertexArray(ShapeRenderer->Vao);
+    int ExpectedBytesUsed = 6*4*ShapeRenderer->NumVertices;
+    int ActualBytesUsed = GetBytesUsed(ShapeRenderer);
+    Assert(ActualBytesUsed == ExpectedBytesUsed);
+
+    /* 0 = Front, 1 = Back. */
+    GLint OriginalPolygonMode[2];
+    Assert(OriginalPolygonMode[0] == OriginalPolygonMode[1]);
+    glGetIntegerv(GL_POLYGON_MODE, OriginalPolygonMode);
+    if (ShapeRenderer->IsWireframe)
     {
-        glUseProgram(ShapeRenderer->ShaderProgram);
-        int WindowDimensionsUniformLocation = glGetUniformLocation(ShapeRenderer->ShaderProgram, "WindowDimensions");
-        Assert(WindowDimensionsUniformLocation != -1);
-        glUniform2f(WindowDimensionsUniformLocation, (float)ShapeRenderer->WindowWidth, (float)ShapeRenderer->WindowHeight);
-
-        FillVertexBuffer(ShapeRenderer->Vbo, ShapeRenderer->VertexData, GetBytesUsed(ShapeRenderer));
-
-        if(ShapeRenderer->IsWireframe)
-        {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        }
-
-        switch(ShapeRenderer->CurrentType)
-        {
-            case ShapeType_Point:
-            {
-                glPointSize(ShapeRenderer->PointSize);
-                glDrawArrays(GL_POINTS, 0, ShapeRenderer->NumVertices);
-            } break;
-
-            case ShapeType_Line:
-            {
-                glLineWidth(ShapeRenderer->LineWidth);
-                glDrawArrays(GL_LINES, 0, ShapeRenderer->NumVertices);
-            } break;
-
-            case ShapeType_Triangle:
-            {
-                glDrawArrays(GL_TRIANGLES, 0, ShapeRenderer->NumVertices);
-            } break;
-        }
-
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     }
-    glBindVertexArray(0);
+    BeginRender(&ShapeRenderer->Common, GetBytesUsed(ShapeRenderer));
+
+    switch (ShapeRenderer->CurrentType)
+    {
+        case ShapeType_Point:
+        {
+            glPointSize(ShapeRenderer->PointSize);
+            glDrawArrays(GL_POINTS, 0, ShapeRenderer->NumVertices);
+        } break;
+
+        case ShapeType_Line:
+        {
+            glLineWidth(ShapeRenderer->LineWidth);
+            glDrawArrays(GL_LINES, 0, ShapeRenderer->NumVertices);
+        } break;
+
+        case ShapeType_Triangle:
+        {
+            glDrawArrays(GL_TRIANGLES, 0, ShapeRenderer->NumVertices);
+        } break;
+
+        case ShapeType_Triangle_Fan:
+        {
+            glDrawArrays(GL_TRIANGLE_FAN, 0, ShapeRenderer->NumVertices);
+        } break;
+    }
 
     Reset(ShapeRenderer);
+    EndRender(&ShapeRenderer->Common);
+    glPolygonMode(GL_FRONT_AND_BACK, OriginalPolygonMode[0]);
 }
 
 internal void
@@ -187,7 +156,7 @@ Render(shape_renderer *ShapeRenderer)
     Flush(ShapeRenderer);
 }
 
-inline internal bool
+internal bool
 HasBytesLeftFor(shape_renderer *ShapeRenderer, uint32_t Size)
 {
     uint32_t BytesUsed = GetBytesUsed(ShapeRenderer);
@@ -196,16 +165,12 @@ HasBytesLeftFor(shape_renderer *ShapeRenderer, uint32_t Size)
 }
 
 internal void
-AddPoint(shape_renderer *ShapeRenderer, v2 P, float PointSize, v4 Color)
+CheckFlush(shape_renderer *ShapeRenderer, shape_type ShapeType, int ShapeSizeBytes, bool ForceFlushIfSame)
 {
-    shape_renderer_point Point = {
-        EXPANDV2(P), EXPANDV4(Color)
-    };
-
-    if(ShapeRenderer->CurrentType == ShapeType_Point)
+    if (ShapeRenderer->CurrentType == ShapeType)
     {
-        if(!HasBytesLeftFor(ShapeRenderer, sizeof(Point)) ||
-           ShapeRenderer->PointSize != PointSize)
+        if (!HasBytesLeftFor(ShapeRenderer, ShapeSizeBytes) ||
+            ForceFlushIfSame)
         {
             Flush(ShapeRenderer);
         }
@@ -213,73 +178,50 @@ AddPoint(shape_renderer *ShapeRenderer, v2 P, float PointSize, v4 Color)
     else
     {
         Flush(ShapeRenderer);
-
-        ShapeRenderer->CurrentType = ShapeType_Point;
+        ShapeRenderer->CurrentType = ShapeType;
     }
-    ShapeRenderer->PointSize = PointSize;
+}
 
-    *(shape_renderer_point *)ShapeRenderer->InsertionPoint = Point;
-    ShapeRenderer->InsertionPoint += sizeof(Point);
+internal void
+Add(shape_renderer *ShapeRenderer, v2 P, v4 Color)
+{
+    *ShapeRenderer->InsertionPoint++ = P.X;
+    *ShapeRenderer->InsertionPoint++ = P.Y;
+    *ShapeRenderer->InsertionPoint++ = Color.R;
+    *ShapeRenderer->InsertionPoint++ = Color.G;
+    *ShapeRenderer->InsertionPoint++ = Color.B;
+    *ShapeRenderer->InsertionPoint++ = Color.A;
     ShapeRenderer->NumVertices += 1;
 }
 
 internal void
-AddLine(shape_renderer *ShapeRenderer, line2 InputLine, float LineWidth, v4 Color)
+AddPoint(shape_renderer *ShapeRenderer, v2 P, float PointSize, v4 Color)
 {
-    shape_renderer_line Line = {
-        EXPANDV2(InputLine.P1), EXPANDV4(Color), 
-        EXPANDV2(InputLine.P2), EXPANDV4(Color)
-    };
+    bool ForceFlushIfSame = ShapeRenderer->PointSize != PointSize;
+    CheckFlush(ShapeRenderer, ShapeType_Point, 1*SHAPE_RENDERER_BYTES_PER_VERTEX, ForceFlushIfSame);
+    ShapeRenderer->PointSize = PointSize;
+    Add(ShapeRenderer, P, Color);
+}
 
-    if(ShapeRenderer->CurrentType == ShapeType_Line)
-    {
-        if(!HasBytesLeftFor(ShapeRenderer, sizeof(Line)) ||
-           ShapeRenderer->LineWidth != LineWidth)
-        {
-            Flush(ShapeRenderer);
-        }
-    }
-    else
-    {
-        Flush(ShapeRenderer);
-
-        ShapeRenderer->CurrentType = ShapeType_Line;
-    }
+internal void
+AddLine(shape_renderer *ShapeRenderer, line2 Line, float LineWidth, v4 Color)
+{
+    bool ForceFlushIfSame = ShapeRenderer->LineWidth != LineWidth;
+    CheckFlush(ShapeRenderer, ShapeType_Line, 2*SHAPE_RENDERER_BYTES_PER_VERTEX, ForceFlushIfSame);
     ShapeRenderer->LineWidth = LineWidth;
-
-    *(shape_renderer_line *)ShapeRenderer->InsertionPoint = Line;
-    ShapeRenderer->InsertionPoint += sizeof(Line);
-    ShapeRenderer->NumVertices += 2;
+    Add(ShapeRenderer, Line.P1, Color);
+    Add(ShapeRenderer, Line.P2, Color);
 }
 
 internal void
 AddTriangle(shape_renderer *ShapeRenderer, tri2 Tri, v4 Color, bool IsWireframe = false)
 {
-    shape_renderer_triangle Triangle = {
-        EXPANDV2(Tri.P1), EXPANDV4(Color), 
-        EXPANDV2(Tri.P2), EXPANDV4(Color),
-        EXPANDV2(Tri.P3), EXPANDV4(Color),
-    };
-
-    if(ShapeRenderer->CurrentType == ShapeType_Triangle)
-    {
-        if(!HasBytesLeftFor(ShapeRenderer, sizeof(Triangle)) ||
-           ShapeRenderer->IsWireframe != IsWireframe)
-        {
-            Flush(ShapeRenderer);
-        }
-    }
-    else
-    {
-        Flush(ShapeRenderer);
-
-        ShapeRenderer->CurrentType = ShapeType_Triangle;
-    }
+    bool ForceFlushIfSame = ShapeRenderer->IsWireframe != IsWireframe;
+    CheckFlush(ShapeRenderer, ShapeType_Triangle, 3*SHAPE_RENDERER_BYTES_PER_VERTEX, ForceFlushIfSame);
     ShapeRenderer->IsWireframe = IsWireframe;
-
-    *(shape_renderer_triangle *)ShapeRenderer->InsertionPoint = Triangle;
-    ShapeRenderer->InsertionPoint += sizeof(Triangle);
-    ShapeRenderer->NumVertices += 3;
+    Add(ShapeRenderer, Tri.P1, Color);
+    Add(ShapeRenderer, Tri.P2, Color);
+    Add(ShapeRenderer, Tri.P3, Color);
 }
 
 internal void
@@ -294,8 +236,35 @@ AddRay(shape_renderer *ShapeRenderer, ray2 Ray, float Length, float LineWidth, v
 {
     v2 P1 = Ray.Pos;
     v2 P2 = Ray.Pos + Length*Ray.Dir;
-    line2 Line = {P1, P2};
+    line2 Line = { P1, P2 };
     AddLine(ShapeRenderer, Line, LineWidth, Color);
+}
+
+internal void
+AddCircle(shape_renderer *ShapeRenderer, v2 Pos, float Radius, v4 Color, bool IsWireframe = false)
+{
+    int NumCirclePoints = 64;
+    int MaxNumVertices = NumCirclePoints + 2;
+    bool ForceFlushIfSame = ShapeRenderer->IsWireframe != IsWireframe;
+    CheckFlush(ShapeRenderer, ShapeType_Triangle_Fan, MaxNumVertices*SHAPE_RENDERER_BYTES_PER_VERTEX, ForceFlushIfSame);
+    ShapeRenderer->IsWireframe = IsWireframe;
+
+    float Step = 360.0f/(float)NumCirclePoints;
+    v2 PointOnCircle = V2(0.0f, Radius);
+    line2 LineThroughCircle = {Pos - PointOnCircle, Pos + PointOnCircle};
+    Add(ShapeRenderer, Pos, Color);
+    NumCirclePoints++;
+    while (NumCirclePoints--)
+    {
+        Add(ShapeRenderer, LineThroughCircle.P1, Color);
+        RotateAroundCenter(&LineThroughCircle, Step);
+    }
+}
+
+internal void
+Free(shape_renderer *ShapeRenderer)
+{
+    Free(&ShapeRenderer->Common);
 }
 
 #endif

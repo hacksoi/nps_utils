@@ -27,7 +27,7 @@ global v4 GLUTILS_YELLOW = {1.0f, 1.0f, 0.0f, 1.0f};
 global v4 GLUTILS_ORANGE = ns_hex_string_to_vec("ffa500");
 
 // The default calling convention is __cdecl. Unfortunately, the OpenGL functions are defined
-typedef void __stdcall opengl_get_error_info(GLuint shader, GLsizei maxLength, GLsizei *length, GLchar *infoLog); // i.e. glGetShaderInfoLog()
+typedef void __stdcall opengl_get_error_info(GLuint globject, GLsizei maxLength, GLsizei *length, GLchar *infoLog); // i.e. glGetShaderInfoLog()
 inline internal void
 LogErrorMessageFromGLInfoFunc(uint32_t OpenGLObject, opengl_get_error_info OpenGLGetErrorInfo, const char *ExitMessage)
 {
@@ -225,6 +225,64 @@ InsertQuad(quad2 Quad, float *VertexData, int *VertexDataCount)
         VertexData[(*VertexDataCount)++] = Quad.TopLeft.X;
         VertexData[(*VertexDataCount)++] = Quad.TopLeft.Y;
     }
+}
+
+internal void
+InsertTexture(float *VertexData, int *NumVertexData, quad2 Positions, quad2 TexCoord)
+{
+    {
+        VertexData[(*NumVertexData)++] = Positions.BottomLeft.X;
+        VertexData[(*NumVertexData)++] = Positions.BottomLeft.Y;
+        VertexData[(*NumVertexData)++] = TexCoord.BottomLeft.X;
+        VertexData[(*NumVertexData)++] = TexCoord.BottomLeft.Y;
+
+        VertexData[(*NumVertexData)++] = Positions.BottomRight.X;
+        VertexData[(*NumVertexData)++] = Positions.BottomRight.Y;
+        VertexData[(*NumVertexData)++] = TexCoord.BottomRight.X;
+        VertexData[(*NumVertexData)++] = TexCoord.BottomRight.Y;
+
+        VertexData[(*NumVertexData)++] = Positions.TopLeft.X;
+        VertexData[(*NumVertexData)++] = Positions.TopLeft.Y;
+        VertexData[(*NumVertexData)++] = TexCoord.TopLeft.X;
+        VertexData[(*NumVertexData)++] = TexCoord.TopLeft.Y;
+    }
+
+    {
+        VertexData[(*NumVertexData)++] = Positions.BottomRight.X;
+        VertexData[(*NumVertexData)++] = Positions.BottomRight.Y;
+        VertexData[(*NumVertexData)++] = TexCoord.BottomRight.X;
+        VertexData[(*NumVertexData)++] = TexCoord.BottomRight.Y;
+
+        VertexData[(*NumVertexData)++] = Positions.TopRight.X;
+        VertexData[(*NumVertexData)++] = Positions.TopRight.Y;
+        VertexData[(*NumVertexData)++] = TexCoord.TopRight.X;
+        VertexData[(*NumVertexData)++] = TexCoord.TopRight.Y;
+
+        VertexData[(*NumVertexData)++] = Positions.TopLeft.X;
+        VertexData[(*NumVertexData)++] = Positions.TopLeft.Y;
+        VertexData[(*NumVertexData)++] = TexCoord.TopLeft.X;
+        VertexData[(*NumVertexData)++] = TexCoord.TopLeft.Y;
+    }
+}
+
+internal void
+InsertTexture(float *VertexData, int *NumVertexData, rect2 PosRect, rect2 TexCoordRect)
+{
+    quad2 PosQuad = QUAD2(PosRect);
+    quad2 TexCoordQuad = QUAD2(TexCoordRect);
+    InsertTexture(VertexData, NumVertexData, PosQuad, TexCoordQuad);
+}
+
+internal void
+TurnOnWireFrame()
+{
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+}
+
+internal void
+TurnOffWireFrame()
+{
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
 inline internal void

@@ -12,6 +12,7 @@
 
 
 #if defined(WINDOWS)
+    #define DebugPrintFileInfo() DebugPrintInfo();
 #elif defined(LINUX)
     #define DebugPrintFileInfo() DebugPrintInfo(); perror("    file error")
 #endif
@@ -27,6 +28,7 @@ bool
 ns_file_check_exists(char *filename)
 {
 #if defined(WINDOWS)
+    return false;
 #elif defined(LINUX)
     return (access(filename, F_OK) != -1);
 #endif
@@ -101,6 +103,45 @@ ns_file_load(NsFile *file, char *buffer, int buffer_size)
     }
 
     return bytes_read;
+}
+
+struct ns_file
+{
+    uint8_t *Contents;
+    uint32_t Size;
+};
+
+internal ns_file
+LoadFile(const char *Filename)
+{
+    ns_file Result = {0};
+
+    FILE *File = fopen(Filename, "rb");
+    Assert(File != NULL);
+
+    int FileSize = 0;
+    {
+        CheckZero_RR(fseek(File, 0, SEEK_END));
+        FileSize = ftell(File);
+        CheckNotNeg1_RR(FileSize);
+        CheckZero_RR(fseek(File, 0, SEEK_SET));
+    }
+
+    uint8_t *FileContents = (uint8_t *)MemAlloc(FileSize);
+    size_t BytesRead = fread(FileContents, 1, FileSize, File);
+    CheckEquals_RR(BytesRead, (size_t)FileSize);
+
+    CheckZero_RR(fclose(File));
+
+    Result.Contents = FileContents;
+    Result.Size = FileSize;
+    return Result;
+}
+
+internal void
+Free(ns_file File)
+{
+    MemFree(File.Contents);
 }
 
 #endif

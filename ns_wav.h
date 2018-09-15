@@ -1,20 +1,29 @@
-#ifndef NS_WAV
-#define NS_WAV
+#ifndef NS_WAV_H
+#define NS_WAV_H
 
 #include "ns_common.h"
+#include "ns_file.h"
 
 #pragma pack(push, 1)
-struct riff_header
+
+struct wav_chunk_header
 {
-    uint32_t ChunkID; /* BE */
-    uint32_t ChunkSize;
+    uint32_t ID; /* BE */
+    uint32_t Size;
+};
+
+/* RIFF header. */
+
+struct riff_chunk
+{
+    wav_chunk_header Header;
     uint32_t Format; /* BE */
 };
 
-struct wav_fmt
+/* WAV fmt chunk. */
+
+struct wav_fmt_chunk_data
 {
-    uint32_t Subchunk1ID; /* BE */
-    uint32_t Subchunk1Size;
     uint16_t AudioFormat;
     uint16_t NumChannels;
     uint32_t SampleRate;
@@ -23,82 +32,91 @@ struct wav_fmt
     uint16_t BitsPerSample;
 };
 
-struct wav_data
+struct wav_fmt_chunk
 {
-    uint32_t Subchunk2ID; /* BE */
-    uint32_t Subchunk2Size;
-    uint8_t *Data;
+    wav_chunk_header Header;
+    union
+    {
+        wav_fmt_chunk_data Data;
+        struct
+        {
+            uint16_t AudioFormat;
+            uint16_t NumChannels;
+            uint32_t SampleRate;
+            uint32_t ByteRate;
+            uint16_t BlockAlign;
+            uint16_t BitsPerSample;
+        };
+    };
+};
+
+/* WAV data chunk. */
+
+struct wav_data_chunk
+{
+    wav_chunk_header Header;
+    uint8_t FirstSample;
 };
 #pragma pack(pop)
 
-struct decode_wav_result
+struct ns_wav
 {
-    uint8_t *FileContents;
-    uint16_t *Samples;
-    int NumSamples;
+    ns_file File;
+    riff_chunk *RiffChunk;
+    wav_fmt_chunk *WavFmtChunk;
+    wav_data_chunk *WavDataChunk;
 };
 
-internal decode_wav_result
-DecodeWav(const char *Filename)
+internal wav_chunk_header *
+GetNextChunk(wav_chunk_header *Header)
 {
-    decode_wav_result Result = { };
-
-    int FileSize;
-    riff_header *RiffHeader;
-    wav_fmt *WavFmt;
-    wav_data *WavData;
-    uint8_t *FileContents;
-    {
-        FILE *File = fopen(Filename, "rb");
-        CheckRR(File != NULL);
-
-        FileSize = 0;
-        {
-            CheckRR(!fseek(File, 0, SEEK_END));
-            FileSize = ftell(File);
-            CheckRR(FileSize != -1);
-            CheckRR(!fseek(File, 0, SEEK_SET));
-        }
-
-        FileContents = (uint8_t *)malloc(FileSize);
-        size_t BytesRead = fread(FileContents, 1, FileSize, File);
-        CheckRR(BytesRead == (size_t)FileSize);
-
-        CheckRR(!fclose(File));
-
-        RiffHeader = (riff_header *)FileContents;
-        WavFmt = (wav_fmt *)(RiffHeader + 1);
-        WavData = (wav_data *)(WavFmt + 1);
-        WavData->Data = (uint8_t *)&WavData->Data;
-
-        ReverseEndianness(&RiffHeader->ChunkID);
-        ReverseEndianness(&RiffHeader->Format);
-        ReverseEndianness(&WavFmt->Subchunk1ID);
-        ReverseEndianness(&WavData->Subchunk2ID);
-    }
-
-    /* Verify headers. */
-    {
-        Assert(RiffHeader->ChunkID == 0x52494646); /* 0x52494646 == "RIFF" */
-        Assert(RiffHeader->ChunkSize == (FileSize - (sizeof(RiffHeader->ChunkID) + sizeof(RiffHeader->ChunkSize))));
-        Assert(RiffHeader->Format == 0x57415645); /* 0x57415645 == "WAVE" */
-
-        Assert(WavFmt->Subchunk1ID == 0x666d7420);
-        Assert(WavFmt->Subchunk1Size == 16);
-        Assert(WavFmt->AudioFormat == 1);
-
-        Assert(WavData->Subchunk2ID == 0x64617461);
-    }
-
-    /* Limitation verifications. */
-    Assert(WavFmt->BitsPerSample == 16)
-
-    int BytesPerSample = WavFmt->BitsPerSample/8;
-    Result.FileContents = FileContents;
-    Result.Samples = (uint16_t *)WavData->Data;
-    Result.NumSamples = WavData->Subchunk2Size/BytesPerSample;
-
+    uint8_t *OnePastHeader = (uint8_t *)(Header + 1);
+    wav_chunk_header *Result = (wav_chunk_header *)(OnePastHeader + Header->Size);
     return Result;
+}
+
+internal ns_wav
+LoadWav(const char *Filename)
+{
+    riff_chunk *RiffChunk;
+    wav_fmt_chunk *WavFmtChunk;
+    wav_data_chunk *WavDataChunk;
+    ns_file File = LoadFile(Filename);
+    uint8_t *FileContents = File.Contents;
+    {
+        /* We don't reverse endianness cause it's easier to copy to XAudio2. */
+
+        RiffChunk = (riff_chunk *)FileContents;
+        Assert(RiffChunk->Header.ID == 0x46464952); /* RIFF */
+        Assert(RiffChunk->Format == 0x45564157); /* WAVE */
+
+        WavFmtChunk = (wav_fmt_chunk *)(RiffChunk + 1);
+        Assert(WavFmtChunk->Header.ID == 0x20746d66); /* fmt */
+        Assert(WavFmtChunk->Header.Size == 16 || WavFmtChunk->Header.Size == 18);
+        Assert(WavFmtChunk->AudioFormat == 1);
+
+        WavDataChunk = (wav_data_chunk *)GetNextChunk(&WavFmtChunk->Header);
+        while (WavDataChunk->Header.ID != 0x61746164)
+        {
+            WavDataChunk = (wav_data_chunk *)GetNextChunk(&WavDataChunk->Header);
+        }
+    }
+    /* Limitation verifications. */
+    Assert(WavFmtChunk->NumChannels == 1 || WavFmtChunk->NumChannels == 2);
+    Assert(WavFmtChunk->BitsPerSample == 16);
+
+    ns_wav Result = {};
+    Result.RiffChunk = RiffChunk;
+    Result.WavFmtChunk = WavFmtChunk;
+    Result.WavDataChunk = WavDataChunk;
+    Result.File = File;
+    return Result;
+}
+
+internal void
+Free(ns_wav Wav)
+{
+    Free(Wav.File);
 }
 
 #endif

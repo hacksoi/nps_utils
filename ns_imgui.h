@@ -2,7 +2,7 @@
 #define NPS_IMGUI_H
 
 #include "imgui.h"
-#include "opengl_functions.h"
+#include "ns_opengl_functions.h"
 
 struct imgui_objects
 {
