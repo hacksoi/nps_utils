@@ -1,6 +1,51 @@
 #ifndef NS_SONG
 #define NS_SONG
 
+/* Example usage:
+
+    ns_song Song;
+    float SongVolume = 0.0f;
+    float SongTime;
+    bool NewSongTimePicked;
+    bool PausePlayPressed;
+    bool PausePlayValue;
+
+    CreateSong(&Song, "aqualung.wav");
+    Play(&Song);
+    SetVolume(&Song, 0.0f);
+
+    SetVolume(&Song, SongVolume);
+    if (NewSongTimePicked && !AppInput->IsLMBDown)
+    {
+        Seek(&Song, SongTime);
+    }
+    else
+    {
+        SongTime = GetTime(&Song);
+    }
+
+    if (PausePlayPressed)
+    {
+        if (IsPlaying(&Song))
+        {
+            Pause(&Song);
+        }
+        else
+        {
+            Play(&Song);
+        }
+    }
+
+    ImGui::SliderFloat("SongVolume", &SongVolume, 0.0f, 1.0f, "Volume = %.3f");
+    NewSongTimePicked = ImGui::SliderFloat("SongTime", &SongTime, 0.0f, Song.Duration, "Time = %.3f");
+    if (SongTime > Song.Duration)
+    {
+        SongTime = Song.Duration;
+    }
+    PausePlayPressed = ImGui::Checkbox("Pause/Play", &PausePlayValue);
+
+*/
+
 #include <xaudio2.h>
 #include "ns_common.h"
 #include "ns_wav.h"

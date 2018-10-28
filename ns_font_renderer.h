@@ -17,6 +17,12 @@
 #define NS_FONT_RENDERER_FLOATS_PER_CHAR 24
 #define NS_FONT_RENDERER_MAX_VERTEX_DATA_SIZE (NS_FONT_RENDERER_MAX_STRING_SIZE*NS_FONT_RENDERER_FLOATS_PER_CHAR)
 
+/* TODO: query OS for this. */
+#define SCREEN_DPI 72
+
+#define NUM_BEZIER_STEPS 5
+#define BEZIER_STEP_AMT (1.0f/(float)NUM_BEZIER_STEPS)
+
 enum font_renderer_type
 {
     FontRendererType_BMF,
@@ -36,6 +42,33 @@ struct font_renderer
     uint32_t ImageHeight;
 
     font_renderer_type Type;
+};
+
+/* A glyph outline specified by points. */
+struct glyph_outline_points
+{
+    v2 *Points;
+    /* Note: the first point of a contour is included twice: once at the beginning and the end - this is necessary because 
+       the last and first points might have a curve between them. */
+    int NumPoints;
+    rect2 BoundingBox;
+    int *ContourEndIndices;
+    int NumContours;
+};
+
+struct glyph_outline_points_edge_iterator
+{
+    glyph_outline_points *OutlinePoints;
+    int PointIdx1;
+    int PointIdx2;
+};
+
+/* TODO(@memory): this uses more memory than glyph_outline_points - we use it because it's more convenient. A glyph 
+   outline specified by edges. */
+struct glyph_outline_edges
+{
+    line2 *Edges;
+    int NumEdges;
 };
 
 const char *NsFontRendererVertexShaderSource = R"STR(
@@ -70,6 +103,146 @@ void main()
     OutputColor = vec4(1.0f, 1.0f, 1.0f, TexColor.r);
 }
 )STR";
+
+internal int
+CalcMaxNumBezierPoints(int NumGlyphPoints)
+{
+    /* + 1 for the very first point. */
+    int Result = NumGlyphPoints*NUM_BEZIER_STEPS + 1;
+    return Result;
+}
+
+internal glyph_outline_points_edge_iterator
+GetEdgeIterator(glyph_outline_points *Mesh)
+{
+    glyph_outline_points_edge_iterator Result = {};
+    Result.OutlinePoints = Mesh;
+    Result.PointIdx2 = 1;
+    return Result;
+}
+
+internal bool
+HasMore(glyph_outline_points_edge_iterator *Iterator)
+{
+    Assert(Iterator->PointIdx2 <= Iterator->OutlinePoints->ContourEndIndices[Iterator->OutlinePoints->NumContours - 1]);
+    /* Did we wrap - last and first points? */
+    bool Result = (Iterator->PointIdx2 != 0);
+    return Result;
+}
+
+internal void
+Advance(glyph_outline_points_edge_iterator *Iterator)
+{
+    Assert(Iterator->PointIdx2 < Iterator->OutlinePoints->NumPoints);
+    /* Are we at the very end? */
+    if (Iterator->PointIdx2 == Iterator->OutlinePoints->NumPoints - 1)
+    {
+        /* Well, there's one more edge - the last and first points. */
+        Iterator->PointIdx1 = Iterator->PointIdx2;
+        Iterator->PointIdx2 = 0;
+    }
+    else
+    {
+        bool AtEndOfContour = false;
+        for (int I = 0; I < Iterator->OutlinePoints->NumContours; I++)
+        {
+            if (Iterator->PointIdx2 == Iterator->OutlinePoints->ContourEndIndices[I])
+            {
+                AtEndOfContour = true;
+                break;
+            }
+        }
+        Iterator->PointIdx1 += AtEndOfContour ? 2 : 1;
+        Iterator->PointIdx2 = Iterator->PointIdx1 + 1;
+    }
+}
+
+internal line2
+GetEdge(glyph_outline_points_edge_iterator *Iterator)
+{
+    v2 P1 = Iterator->OutlinePoints->Points[Iterator->PointIdx1];
+    v2 P2 = Iterator->OutlinePoints->Points[Iterator->PointIdx2];
+    line2 Result = LINE2(P1, P2);
+    return Result;
+}
+
+internal ns_texture
+CreateGlyphTexture(glyph_outline_points *Mesh)
+{
+    /* Make it zero based. */
+    v2 Fix = V2(-Mesh->BoundingBox.Min.X, -Mesh->BoundingBox.Min.Y);
+    Mesh->BoundingBox.Min += V2(0, 0);
+    Mesh->BoundingBox.Max += Fix;
+    for (int I = 0; I < Mesh->NumPoints; I++)
+    {
+        Mesh->Points[I] += Fix;
+    }
+
+    v2 Dimensions = GetSize(Mesh->BoundingBox);
+    ns_texture Result = {};
+    Result.Width = Ceil(Dimensions.X);
+    Result.Height = Ceil(Dimensions.Y);
+    Result.Width = NextPowerOfTwo(Result.Width);
+    Result.Height = NextPowerOfTwo(Result.Height);
+    Result.Data = MemAlloc(Result.Width*Result.Height);
+    for (int Y = 0; Y < Result.Height; Y++)
+    {
+        v2 PrevPixelLoc = V2(-1, Y);
+        bool InGlyph = false;
+        for (int X = 0; X < Result.Width; X++)
+        {
+            /* TODO: somehow binary search for each horizontal? */
+            v2 PixelLoc = V2(X, Y);
+            line2 L = LINE2(PrevPixelLoc, PixelLoc);
+            int NumIntersections = 0;
+            for (glyph_outline_points_edge_iterator EdgeIterator = GetEdgeIterator(Mesh); HasMore(&EdgeIterator); Advance(&EdgeIterator))
+            {
+                line2 Edge = GetEdge(&EdgeIterator);
+                if (L.P1.X == Edge.P1.X || L.P1.Y == Edge.P1.Y ||
+                    L.P1.X == Edge.P2.X || L.P1.Y == Edge.P2.Y ||
+                    Intersects(L, Edge))
+                {
+                    NumIntersections++;
+                }
+            }
+
+            if (NumIntersections % 2)
+            {
+                /* Toogle. */
+                InGlyph = !InGlyph;
+            }
+
+            uint8_t *Pixel = &Result.Data[Y*Result.Width + X];
+            *Pixel = InGlyph ? 255 : 0;
+
+            PrevPixelLoc = PixelLoc;
+        }
+    }
+
+    return Result;
+}
+
+struct shape_mesh
+{
+    int NumTriangles;
+    tri2 *Triangles;
+};
+
+internal shape_mesh
+CreateMesh(ns_ttf *Ttf, glyph_outline_points *Outline)
+{
+    shape_mesh Result = {};
+    Result.Triangles = (tri2 *)MemAlloc(Megabytes(1));
+    return Result;
+}
+
+internal void
+Free(shape_mesh *Mesh)
+{
+    MemFree(Mesh->Triangles);
+}
+
+/* APIs */
 
 internal font_renderer
 CreateFontRenderer(uint32_t WindowWidth, uint32_t WindowHeight)
@@ -113,51 +286,27 @@ CreateFontRenderer(const char *BmfFilename, const char *TgaFilename, uint32_t Wi
     return Result;
 }
 
-struct glyph_outline
-{
-    v2 *Points;
-    int MaxNumPoints;
-    int NumPoints;
-    int *ContourEndIndices;
-    int NumContours;
-    rect2 BoundingBox;
-};
-
-#define NUM_BEZIER_STEPS 5
-#define BEZIER_STEP_AMT (1.0f/(float)NUM_BEZIER_STEPS)
-
-internal int
-CalcMaxNumBezierPoints(int NumGlyphPoints)
-{
-    /* + 1 for the very first point. */
-    int Result = NumGlyphPoints*NUM_BEZIER_STEPS + 1;
-    return Result;
-}
-
-/* TODO: query OS for this. */
-#define SCREEN_DPI 72
-
 /* TODO: Instead of specifying point size, how about pixels? */
-internal glyph_outline
-CreateGlyphOutline(ns_ttf *TtfFile, char Char, int PointSize)
+internal glyph_outline_points
+CreateGlyphOutlinePoints(font_renderer *FontRenderer, char Char, int PointSize)
 {
-    int DebugNumPoints = GetNumPointsInGlyph(TtfFile, Char);
+    int DebugNumPoints = GetNumPointsInGlyph(&FontRenderer->TtfFile, Char);
     DebugNumPoints = CalcMaxNumBezierPoints(DebugNumPoints);
-    int DebugNumContours = GetNumContoursInGlyph(TtfFile, Char);
+    int DebugNumContours = GetNumContoursInGlyph(&FontRenderer->TtfFile, Char);
 
     /* TODO(@memory): We're calculating the maximum number of points, but for two points connected by a simple line, we 
-       don't split the line up into 10 pieces. */
-    glyph_outline Result = {};
-    int NumGlyphPoints = GetNumPointsInGlyph(TtfFile, Char);
-    int NumContours = GetNumContoursInGlyph(TtfFile, Char);
-    Result.MaxNumPoints = CalcMaxNumBezierPoints(NumGlyphPoints);
-    int PointsAndEndContourIndicesSize = sizeof(v2)*Result.MaxNumPoints + sizeof(int)*NumContours;
+       shouldn't split the line up into 10 pieces. */
+    glyph_outline_points Result = {};
+    int NumGlyphPoints = GetNumPointsInGlyph(&FontRenderer->TtfFile, Char);
+    int NumContours = GetNumContoursInGlyph(&FontRenderer->TtfFile, Char);
+    int MaxNumPoints = CalcMaxNumBezierPoints(NumGlyphPoints);
+    int PointsAndEndContourIndicesSize = sizeof(v2)*MaxNumPoints + sizeof(int)*NumContours;
     Result.Points = (v2 *)MemAlloc(PointsAndEndContourIndicesSize);
-    Result.ContourEndIndices = (int *)(Result.Points + Result.MaxNumPoints);
-    float FUnitsToPixels = GetFUnitsToPixels(TtfFile, PointSize, SCREEN_DPI);
-    Result.BoundingBox = FUnitsToPixels*GetBoundingBox(TtfFile, Char);
+    Result.ContourEndIndices = (int *)(Result.Points + MaxNumPoints);
+    float FUnitsToPixels = GetFUnitsToPixels(&FontRenderer->TtfFile, PointSize, SCREEN_DPI);
+    Result.BoundingBox = FUnitsToPixels*GetBoundingBox(&FontRenderer->TtfFile, Char);
 
-	for (glyph_iterator GlyphIterator = GetGlyphIterator(TtfFile, Char); HasMore(&GlyphIterator); Advance(&GlyphIterator))
+	for (glyph_iterator GlyphIterator = GetGlyphIterator(&FontRenderer->TtfFile, Char); HasMore(&GlyphIterator); Advance(&GlyphIterator))
 	{
 		v2 GlyphOffset = FUnitsToPixels*V2(GlyphIterator.XOffset, GlyphIterator.YOffset);
 		for (glyph_contour_iterator ContourIterator = GetContourIterator(&GlyphIterator); HasMore(&ContourIterator); Advance(&ContourIterator))
@@ -275,140 +424,24 @@ CreateGlyphOutline(ns_ttf *TtfFile, char Char, int PointSize)
 }
 
 internal void
-Free(glyph_outline *GlyphMesh)
+ConvertOutlinePointsToEdges(glyph_outline_points *GlyphOutlinePoints, line2 **OutputEdges, int *OutputNumEdges)
 {
-    MemFree(GlyphMesh->Points);
-}
-
-struct glyph_edge_iterator
-{
-    glyph_outline *Mesh;
-    int PointIdx1;
-    int PointIdx2;
-};
-
-internal glyph_edge_iterator
-GetEdgeIterator(glyph_outline *Mesh)
-{
-    glyph_edge_iterator Result = {};
-    Result.Mesh = Mesh;
-    Result.PointIdx2 = 1;
-    return Result;
-}
-
-internal bool
-HasMore(glyph_edge_iterator *Iterator)
-{
-    Assert(Iterator->PointIdx2 <= Iterator->Mesh->ContourEndIndices[Iterator->Mesh->NumContours - 1]);
-    bool Result = (Iterator->PointIdx2 != Iterator->Mesh->ContourEndIndices[Iterator->Mesh->NumContours - 1]);
-    return Result;
-}
-
-internal void
-Advance(glyph_edge_iterator *Iterator)
-{
-    Assert(Iterator->PointIdx2 < Iterator->Mesh->NumPoints - 1);
-    bool AtEndOfContour = false;
-    for (int I = 0; I < Iterator->Mesh->NumContours; I++)
+    line2 *Edges = (line2 *)MemAlloc(sizeof(line2)*GlyphOutlinePoints->NumPoints);
+    int NumEdges = 0;
+    for (glyph_outline_points_edge_iterator EdgeIterator = GetEdgeIterator(GlyphOutlinePoints); HasMore(&EdgeIterator); Advance(&EdgeIterator))
     {
-        if (Iterator->PointIdx2 == Iterator->Mesh->ContourEndIndices[I])
-        {
-            AtEndOfContour = true;
-            break;
-        }
+        Edges[NumEdges++] = GetEdge(&EdgeIterator);
     }
-    Iterator->PointIdx1 += AtEndOfContour ? 2 : 1;
-    Iterator->PointIdx2 = Iterator->PointIdx1 + 1;
-}
+    Assert(NumEdges == GlyphOutlinePoints->NumPoints - 1);
 
-internal line2
-GetEdge(glyph_edge_iterator *Iterator)
-{
-    v2 P1 = Iterator->Mesh->Points[Iterator->PointIdx1];
-    v2 P2 = Iterator->Mesh->Points[Iterator->PointIdx2];
-    line2 Result = LINE2(P1, P2);
-    return Result;
-}
-
-internal ns_texture
-CreateGlyphTexture(glyph_outline *Mesh)
-{
-    /* Make it zero based. */
-    v2 Fix = V2(-Mesh->BoundingBox.Min.X, -Mesh->BoundingBox.Min.Y);
-    Mesh->BoundingBox.Min += V2(0, 0);
-    Mesh->BoundingBox.Max += Fix;
-    for (int I = 0; I < Mesh->NumPoints; I++)
-    {
-        Mesh->Points[I] += Fix;
-    }
-
-    v2 Dimensions = GetSize(Mesh->BoundingBox);
-    ns_texture Result = {};
-    Result.Width = Ceil(Dimensions.X);
-    Result.Height = Ceil(Dimensions.Y);
-    Result.Width = NextPowerOfTwo(Result.Width);
-    Result.Height = NextPowerOfTwo(Result.Height);
-    Result.Data = MemAlloc(Result.Width*Result.Height);
-    for (int Y = 0; Y < Result.Height; Y++)
-    {
-        v2 PrevPixelLoc = V2(-1, Y);
-        bool InGlyph = false;
-        for (int X = 0; X < Result.Width; X++)
-        {
-            /* TODO: somehow binary search for each horizontal? */
-            v2 PixelLoc = V2(X, Y);
-            line2 L = LINE2(PrevPixelLoc, PixelLoc);
-            int NumIntersections = 0;
-            for (glyph_edge_iterator EdgeIterator = GetEdgeIterator(Mesh); HasMore(&EdgeIterator); Advance(&EdgeIterator))
-            {
-                line2 Edge = GetEdge(&EdgeIterator);
-                if (L.P1.X == Edge.P1.X || L.P1.Y == Edge.P1.Y ||
-                    L.P1.X == Edge.P2.X || L.P1.Y == Edge.P2.Y ||
-                    Intersects(L, Edge))
-                {
-                    NumIntersections++;
-                }
-            }
-
-            if (NumIntersections % 2)
-            {
-                /* Toogle. */
-                InGlyph = !InGlyph;
-            }
-
-            uint8_t *Pixel = &Result.Data[Y*Result.Width + X];
-            *Pixel = InGlyph ? 255 : 0;
-
-            PrevPixelLoc = PixelLoc;
-        }
-    }
-
-    return Result;
-}
-
-struct shape_mesh
-{
-    int NumTriangles;
-    tri2 *Triangles;
-};
-
-internal shape_mesh
-CreateMesh(ns_ttf *Ttf, glyph_outline *Outline)
-{
-    shape_mesh Result = {};
-    Result.Triangles = (tri2 *)MemAlloc(Megabytes(1));
-    return Result;
-}
-
-internal void
-Free(shape_mesh *Mesh)
-{
-    MemFree(Mesh->Triangles);
+    *OutputEdges = Edges;
+    *OutputNumEdges = NumEdges;
 }
 
 internal void
 DrawString(font_renderer *FontRenderer, const char *String, float StringPosX, float StringPosY, float FontScale = 1.0f, shape_renderer *ShapeRenderer = 0)
 {
+#if 0
     Assert(StrLen((char *)String) <= NS_FONT_RENDERER_MAX_STRING_SIZE);
 
     v2 StringPos = V2(500.0f, 250.0f);//V2(StringPosX, StringPosY);
@@ -421,9 +454,11 @@ DrawString(font_renderer *FontRenderer, const char *String, float StringPosX, fl
             {
                 char Char = *String++;
 
-				glyph_outline GlyphOutline = CreateGlyphOutline(&FontRenderer->TtfFile, Char, 300);
-                shape_mesh GlyphMesh = CreateMesh(&FontRenderer->TtfFile, &GlyphOutline);
-#if 0
+				glyph_outline_points GlyphOutline = CreateGlyphOutlinePoints(FontRenderer, Char, 300);
+#if 1 /* New and improved approach: meshes!!! */
+                /* In the works... */
+                //shape_mesh GlyphMesh = CreateMesh(&FontRenderer->TtfFile, &GlyphOutline);
+#else /* Bitmap approach, which sucks!! */
                 ns_texture GlyphTexture = CreateGlyphTexture(&GlyphOutline);
                 ns_texture GlyphTexture;
                 GlyphTexture.Width = 64;
@@ -510,6 +545,19 @@ DrawString(font_renderer *FontRenderer, const char *String, float StringPosX, fl
             CrashProgram();
         } break;
     }
+#endif
+}
+
+internal void
+Free(glyph_outline_points *GlyphMesh)
+{
+    MemFree(GlyphMesh->Points);
+}
+
+internal void
+Free(glyph_outline_edges *Outline)
+{
+    MemFree(Outline->Edges);
 }
 
 internal void

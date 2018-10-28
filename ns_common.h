@@ -50,8 +50,6 @@
 #define Megabytes(NumberOfMbs) (NumberOfMbs * 1024 * 1024)
 #define Gigabytes(NumberOfGbs) (NumberOfGbs * 1024 * 1024 * 1024)
 
-#define ArrayCount(Array) (sizeof(Array)/sizeof(Array[0]))
-
 //#define Assert(Expression) assert(Expression);
 #define Assert(Expression) if (!(Expression)) (*((int *)0) = 0)
 #define CrashProgram() Assert(false)
@@ -111,5 +109,25 @@ internal void Printf(const char *Format, ...);
 internal void Printf(int Value);
 internal void Printf(float Value);
 internal void Printf(uint32_t Value);
+
+/* Arrays. */
+
+#define ArrayCount(Array) (sizeof(Array)/sizeof(Array[0]))
+#define ArrayEnd(Array) (&Array[ArrayCount(Array)])
+
+template <class ArrayPointerType, class Value>
+bool CheckArrayContains(ArrayPointerType Array, int ArrayLength, Value Value)
+{
+    bool Result = false;
+    for (int I = 0; I < ArrayLength; I++)
+    {
+        if (Array[I] == Value)
+        {
+            Result = true;
+            break;
+        }
+    }
+    return Result;
+}
 
 #endif

@@ -102,6 +102,9 @@ union mat4
 struct line2
 {
     v2 P1, P2;
+
+    void operator+=(v2);
+    void operator-=(v2);
 };
 
 struct plane
@@ -309,14 +312,15 @@ operator*(float S, v3 V)
 inline internal v3
 operator/(v3 V, float S)
 {
-    v3 Result = (1.0f / S) * V;
+    v3 Result = (1.0f/S) * V;
     return Result;
 }
 
 inline internal bool
 operator==(v2 A, v2 B)
 {
-    bool Result = IsWithinTolerance(A.X, B.X) && IsWithinTolerance(A.Y, B.Y);
+    bool Result = (A.X == B.X && 
+                   A.Y == B.Y);
     return Result;
 }
 
@@ -324,6 +328,13 @@ inline internal bool
 operator!=(v2 A, v2 B)
 {
     bool Result = !(A == B);
+    return Result;
+}
+
+internal bool
+AreEqualTolerance(v2 A, v2 B)
+{
+    bool Result = IsWithinTolerance(A.X, B.X) && IsWithinTolerance(A.Y, B.Y);
     return Result;
 }
 
@@ -335,14 +346,23 @@ IsZero(v2 A)
 }
 
 inline internal v3
-Cross(v3 A, v3 B)
+DoCross(v3 A, v3 B)
 {
     v3 Result = {
         A.Y*B.Z - A.Z*B.Y,
         A.Z*B.X - A.X*B.Z,
         A.X*B.Y - A.Y*B.X
     };
+    return Result;
+}
 
+/* Returns sign of Z-coord of cross product. */
+inline float
+Cross(v2 A, v2 B)
+{
+    v3 CrossProduct = DoCross(V3(A.X, A.Y, 0.0f), V3(B.X, B.Y, 0.0f));
+    Assert(CrossProduct.Z != 0.0f);
+    float Result = CrossProduct.Z > 0.0f ? 1.0f : -1.0f;
     return Result;
 }
 
@@ -485,7 +505,7 @@ RotateAround(v2 *V, v2 P, float AngleDegrees)
 inline internal quaternion
 GetRotationBetween(v3 A, v3 B)
 {
-    v3 RotAxis = Cross(A, B);
+    v3 RotAxis = DoCross(A, B);
     float RotHalfAngle = GetAngleBetween(A, B) / 2.0f;
     quaternion Result = {Sin(RotHalfAngle)*RotAxis, Cos(RotHalfAngle)};
     return Result;
@@ -503,7 +523,7 @@ Conjugate(quaternion Quat)
 inline internal quaternion
 operator*(quaternion A, quaternion B)
 {
-    v3 ResultAxis = Cross(A.Axis, B.Axis) + A.W*B.Axis + B.W*A.Axis;
+    v3 ResultAxis = DoCross(A.Axis, B.Axis) + A.W*B.Axis + B.W*A.Axis;
     float ResultW = A.W*B.W - GetDot(A.Axis, B.Axis);
 
     quaternion Result = {ResultAxis, ResultW};
@@ -846,11 +866,18 @@ Invert(mat4 Matrix)
 
 /* Rays */
 
+internal ray2
+RAY2(v2 Pos, v2 Dir)
+{
+    ray2 Result = {Pos, Dir};
+    return Result;
+}
+
 internal inline ray2
 ToRay2(line2 Line, bool NormalizeDir = true)
 {
     v2 Dir = Line.P2 - Line.P1;
-    if(NormalizeDir)
+    if (NormalizeDir)
     {
         Normalize(&Dir);
     }
@@ -858,6 +885,19 @@ ToRay2(line2 Line, bool NormalizeDir = true)
 
     ray2 Result = {Pos, Dir};
     return Result;
+}
+
+internal bool
+IsValid(ray2 Ray)
+{
+    bool Result = !IsZero(Ray.Dir);
+    return Result;
+}
+
+internal void
+ReverseDirection(ray2 *Ray)
+{
+    Ray->Dir = -Ray->Dir;
 }
 
 /* Triangles */
@@ -869,10 +909,33 @@ TRI2(v2 P1, v2 P2, v2 P3)
     return Result;
 }
 
-/* Copied and pasted from https://stackoverflow.com/a/1165943/5281200. */
+internal bool
+operator==(tri2 A, tri2 B)
+{
+    bool Result = (A.P1 == B.P1 &&
+                   A.P2 == B.P2 &&
+                   A.P3 == B.P3);
+    return Result;
+}
+
+internal v2
+GetVertex(tri2 Tri, int Idx)
+{
+    v2 Result;
+    switch (Idx)
+    {
+        case 0: Result = Tri.P1; break;
+        case 1: Result = Tri.P2; break;
+        default: Result = Tri.P3; break;
+    }
+    return Result;
+}
+
 inline internal
 bool IsCCW(v2 A, v2 B, v2 C)
 {
+    /* Copied and pasted from https://stackoverflow.com/a/1165943/5281200. */
+
     float Edge1 = (B.X - A.X)*(B.Y + A.Y);
     float Edge2 = (C.X - B.X)*(C.Y + B.Y);
     float Edge3 = (A.X - C.X)*(A.Y + C.Y);
@@ -893,6 +956,288 @@ GetSignedArea(v2 A, v2 B, v2 C)
     return Result;
 }
 
+internal void
+Split(tri2 Tri, v2 P, tri2 *OutputTris)
+{
+    OutputTris[0] = TRI2(Tri.P1, Tri.P2, P);
+    OutputTris[1] = TRI2(Tri.P1, Tri.P3, P);
+    OutputTris[2] = TRI2(Tri.P2, Tri.P3, P);
+}
+
+internal line2 LINE2(v2, v2);
+internal void
+GetEdges(tri2 Tri, line2 *OutputEdges)
+{
+    OutputEdges[0] = LINE2(Tri.P1, Tri.P2);
+    OutputEdges[1] = LINE2(Tri.P1, Tri.P3);
+    OutputEdges[2] = LINE2(Tri.P2, Tri.P3);
+}
+
+internal line2
+GetEdge(tri2 Tri, int Index)
+{
+    line2 Edges[3];
+    GetEdges(Tri, Edges);
+    return Edges[Index];
+}
+
+internal bool operator==(line2, line2);
+internal bool
+GetCommonEdge(tri2 A, tri2 B, line2 *Output_CommonEdge)
+{
+    line2 AEdges[3], BEdges[3];
+    GetEdges(A, AEdges);
+    GetEdges(B, BEdges);
+    bool Result = false;
+    for (int AEdgeIdx = 0; AEdgeIdx < ArrayCount(AEdges); AEdgeIdx++)
+    {
+        line2 AEdge = AEdges[AEdgeIdx];
+        for (int BEdgeIdx = 0; BEdgeIdx < ArrayCount(BEdges); BEdgeIdx++)
+        {
+            line2 BEdge = BEdges[BEdgeIdx];
+            if (AEdge == BEdge)
+            {
+                *Output_CommonEdge = AEdge;
+                Result = true;
+                goto end;
+            }
+        }
+    }
+end:
+    return Result;
+}
+
+internal void
+GetEdgesExcluding(tri2 Tri, line2 EdgeToExclude, line2 *OutputEdges)
+{
+    line2 Edges[3];
+    GetEdges(Tri, Edges);
+    if (Edges[0] == EdgeToExclude)
+    {
+        OutputEdges[0] = Edges[1];
+        OutputEdges[1] = Edges[2];
+    }
+    else if(Edges[1] == EdgeToExclude)
+    {
+        OutputEdges[0] = Edges[0];
+        OutputEdges[1] = Edges[2];
+    }
+    else
+    {
+        Assert(Edges[2] == EdgeToExclude);
+        OutputEdges[0] = Edges[0];
+        OutputEdges[1] = Edges[1];
+    }
+}
+
+internal bool ContainsEndPointStrict(line2, v2);
+internal v2
+GetPointExcluding(tri2 Tri, line2 EdgeToExclude)
+{
+    v2 Result;
+    if (!ContainsEndPointStrict(EdgeToExclude, Tri.P1))
+    {
+        Result = Tri.P1;
+    }
+    else if (!ContainsEndPointStrict(EdgeToExclude, Tri.P2))
+    {
+        Result = Tri.P2;
+    }
+    else
+    {
+        Assert(!ContainsEndPointStrict(EdgeToExclude, Tri.P3));
+        Result = Tri.P3;
+    }
+    return Result;
+}
+
+/* Rectangles */
+
+internal rect2
+RECT2(v2 Min, v2 Max)
+{
+    rect2 Result;
+    Result.Min = Min;
+    Result.Max = Max;
+    return Result;
+}
+
+/* Don't delete this. Useful for scaling with respect to the origin. */
+internal rect2
+operator*(float A, rect2 B)
+{
+    rect2 Result;
+    Result.Min = A*B.Min;
+    Result.Max = A*B.Max;
+    return Result;
+}
+
+internal rect2
+RectFromPosSize(v2 Position, v2 Size)
+{
+    rect2 Result = {
+        Position,
+        Position + Size,
+    };
+    return Result;
+}
+
+internal bool
+IsValid(rect2 R)
+{
+    bool Result = R.Min != R.Max;
+    return Result;
+}
+
+internal quad2
+QuadFromPosSize(v2 Position, v2 Size)
+{
+    v2 BottomLeft = { Position.X, Position.Y };
+    v2 BottomRight = BottomLeft + V2(Size.X, 0.0f);
+    v2 TopLeft = BottomLeft + V2(0.0f, Size.Y);
+    v2 TopRight = BottomLeft + Size;
+    quad2 Result = { BottomLeft, BottomRight, TopRight, TopLeft };
+    return Result;
+}
+
+internal v2
+GetPos(rect2 Rect)
+{
+    v2 Result = Rect.Min;
+    return Result;
+}
+
+internal float
+GetWidth(rect2 Rect)
+{
+    float Result = Rect.Max.X - Rect.Min.X;
+    return Result;
+}
+
+internal float
+GetHeight(rect2 Rect)
+{
+    float Result = Rect.Max.Y - Rect.Min.Y;
+    return Result;
+}
+
+internal v2
+GetSize(rect2 *Rect)
+{
+    v2 Result = Rect->Max - Rect->Min;
+    return Result;
+}
+
+internal v2
+GetSize(rect2 Rect)
+{
+    v2 Result = GetSize(&Rect);
+    return Result;
+}
+
+internal v2
+GetDim(rect2 Rect)
+{
+    v2 Result = GetSize(&Rect);
+    return Result;
+}
+
+internal v2
+GetDim(rect2 *Rect)
+{
+    v2 Result = GetSize(Rect);
+    return Result;
+}
+
+internal v2
+GetTopLeft(rect2 Rect)
+{
+    v2 Result = V2(Rect.Min.X, Rect.Max.Y);
+    return Result;
+}
+
+internal v2
+GetTopRight(rect2 Rect)
+{
+    v2 Result = Rect.Max;
+    return Result;
+}
+
+internal v2
+GetBottomLeft(rect2 Rect)
+{
+    v2 Result = Rect.Min;
+    return Result;
+}
+
+internal v2
+GetBottomRight(rect2 Rect)
+{
+    v2 Result = V2(Rect.Max.X, Rect.Min.Y);
+    return Result;
+}
+
+internal void
+GetCorners(rect2 Rect, v2 *Corners)
+{
+    Corners[0] = GetBottomLeft(Rect);
+    Corners[1] = GetBottomRight(Rect);
+    Corners[2] = GetTopRight(Rect);
+    Corners[3] = GetTopLeft(Rect);
+}
+
+internal v2
+GetCenter(rect2 *Rect)
+{
+    v2 Result = Rect->Min + 0.5f*(Rect->Max - Rect->Min);
+    return Result;
+}
+
+internal void
+Scale(rect2 *Rect, float Scale)
+{
+    v2 Center = GetCenter(Rect);
+
+    Rect->Min -= Center;
+    Rect->Max -= Center;
+
+    Rect->Min *= Scale;
+    Rect->Max *= Scale;
+
+    Rect->Min += Center;
+    Rect->Max += Center;
+}
+
+internal void
+Expand(rect2 *Rect, float ExpansionScalar)
+{
+    float HalfAmount = ExpansionScalar/2.0f;
+    v2 Expansion = V2(ExpansionScalar, ExpansionScalar);
+    Rect->Min -= Expansion;
+    Rect->Max += Expansion;
+}
+
+/* Creates a bounding box of the given points. */
+internal rect2
+CreateBoundingBox(v2 *Points, int NumPoints)
+{
+    rect2 Result = RECT2(Points[0], Points[0]);
+    for (int I = 0; I < NumPoints; I++)
+    {
+        v2 P = Points[I];
+        if (P.X < Result.Min.X) 
+            Result.Min.X = P.X;
+        if (P.Y < Result.Min.Y) 
+            Result.Min.Y = P.Y;
+        if (P.X > Result.Max.X) 
+            Result.Max.X = P.X;
+        if (P.Y > Result.Max.Y) 
+            Result.Max.Y = P.Y;
+    }
+    Assert(IsValid(Result));
+    return Result;
+}
+
 /* Quads */
 
 #if 0
@@ -909,13 +1254,24 @@ operator*(float A, quad2 B)
 #endif
 
 internal quad2
+QUAD2(v2 BottomLeft, v2 BottomRight, v2 TopRight, v2 TopLeft)
+{
+    quad2 Result;
+    Result.BottomLeft = BottomLeft;
+    Result.BottomRight = BottomRight;
+    Result.TopRight = TopRight;
+    Result.TopLeft = TopLeft;
+    return Result;
+}
+
+internal quad2
 QUAD2(rect2 Rect)
 {
     quad2 Result;
-    Result.BottomLeft = Rect.Min;
-    Result.BottomRight = V2(Rect.Max.X, Rect.Min.Y);
-    Result.TopRight = Rect.Max;
-    Result.TopLeft = V2(Rect.Min.X, Rect.Max.Y);
+    Result.BottomLeft = GetBottomLeft(Rect);
+    Result.BottomRight = GetBottomRight(Rect);
+    Result.TopRight = GetTopRight(Rect);
+    Result.TopLeft = GetTopLeft(Rect);
     return Result;
 }
 
@@ -923,6 +1279,15 @@ inline v3
 quad2_3d::operator[](int CornerIdx)
 {
     return Corners[CornerIdx];
+}
+
+internal void
+GetCorners(quad2 Quad, v2 *Corners)
+{
+    Corners[0] = Quad.BottomLeft;
+    Corners[1] = Quad.BottomRight;
+    Corners[2] = Quad.TopRight;
+    Corners[3] = Quad.TopLeft;
 }
 
 internal quad2_3d
@@ -949,115 +1314,6 @@ GetPlaneCorners(plane Plane, float Size)
     return Result;
 }
 
-/* Rectangles */
-
-internal rect2
-RECT2(v2 Min, v2 Max)
-{
-    rect2 Result;
-    Result.Min = Min;
-    Result.Max = Max;
-    return Result;
-}
-
-internal rect2
-operator*(float A, rect2 B)
-{
-    rect2 Result;
-    Result.Min = A*B.Min;
-    Result.Max = A*B.Max;
-    return Result;
-}
-
-internal rect2
-RectFromPosSize(v2 Position, v2 Size)
-{
-    rect2 Result = {
-        Position,
-        Position + Size,
-    };
-    return Result;
-}
-
-internal quad2
-QuadFromPosSize(v2 Position, v2 Size)
-{
-    v2 BottomLeft = { Position.X, Position.Y };
-    v2 BottomRight = BottomLeft + V2(Size.X, 0.0f);
-    v2 TopLeft = BottomLeft + V2(0.0f, Size.Y);
-    v2 TopRight = BottomLeft + Size;
-    quad2 Result = { BottomLeft, BottomRight, TopRight, TopLeft };
-    return Result;
-}
-
-internal bool
-IsInsideRectangle(v2 Point, rect2 Rectangle)
-{
-    bool Result = (Point.X >= Rectangle.Min.X && Point.X <= Rectangle.Max.X &&
-                   Point.Y >= Rectangle.Min.Y && Point.Y <= Rectangle.Max.Y);
-    return Result;
-}
-
-internal v2
-GetPos(rect2 Rect)
-{
-    v2 Result = Rect.Min;
-    return Result;
-}
-
-internal v2
-GetSize(rect2 *Rect)
-{
-    v2 Result = {
-        Rect->Max.X - Rect->Min.X + 1,
-        Rect->Max.Y - Rect->Min.Y + 1,
-    };
-    return Result;
-}
-
-internal v2
-GetSize(rect2 Rect)
-{
-    v2 Result = GetSize(&Rect);
-    return Result;
-}
-
-internal v2
-GetDim(rect2 Rect)
-{
-    v2 Result = GetSize(&Rect);
-    return Result;
-}
-
-internal v2
-GetDim(rect2 *Rect)
-{
-    v2 Result = GetSize(Rect);
-    return Result;
-}
-
-internal v2
-GetCenter(rect2 *Rect)
-{
-    v2 Result = Rect->Min + 0.5f*(Rect->Max - Rect->Min);
-    return Result;
-}
-
-internal void
-Scale(rect2 *Rect, float Scale)
-{
-    v2 Center = GetCenter(Rect);
-
-    Rect->Min -= Center;
-    Rect->Max -= Center;
-
-    Rect->Min *= Scale;
-    Rect->Max *= Scale;
-
-    Rect->Min += Center;
-    Rect->Max += Center;
-}
-
 /* Lines */
 
 inline internal line2
@@ -1072,6 +1328,41 @@ LINE2(float X1, float Y1, float X2, float Y2)
 {
     line2 Result = {X1, Y1, X2, Y2};
     return Result;
+}
+
+bool
+operator==(line2 A, line2 B)
+{
+    /* For all intents and purposes, we compare both orderings. */
+    return ((A.P1 == B.P1 && A.P2 == B.P2) ||
+            (A.P1 == B.P2 && A.P2 == B.P1));
+}
+
+void
+line2::operator+=(v2 V)
+{
+    this->P1 += V;
+    this->P2 += V;
+}
+
+void
+line2::operator-=(v2 V)
+{
+    this->P1 -= V;
+    this->P2 -= V;
+}
+
+internal void
+EnsureEndPointIsFirst(line2 *Line, v2 Endpoint)
+{
+    /* This point should be one of the endpoints. */
+    Assert(Line->P1 == Endpoint || Line->P2 == Endpoint);
+    if (Line->P1 != Endpoint)
+    {
+        v2 Tmp = Line->P1;
+        Line->P1 = Line->P2;
+        Line->P2 = Tmp;
+    }
 }
 
 inline internal v2
@@ -1167,6 +1458,110 @@ GetDirection(line2 Line)
 
 /* Intersections */
 
+internal bool
+Has(line2 L, v2 V)
+{
+    bool Result = (L.P1 == V ||
+                   L.P2 == V);
+    return Result;
+}
+
+internal bool
+Has(tri2 Tri, line2 Edge)
+{
+    line2 Edges[3];
+    GetEdges(Tri, Edges);
+    bool Result = (Edges[0] == Edge ||
+                   Edges[1] == Edge ||
+                   Edges[2] == Edge);
+    return Result;
+}
+
+internal bool
+Has(tri2 Tri, v2 V)
+{
+    bool Result = (Tri.P1 == V ||
+                   Tri.P2 == V ||
+                   Tri.P3 == V);
+    return Result;
+}
+
+internal bool
+GetEdgesThatHaveVertex(tri2 Tri, v2 Vertex, line2 *Edge0, line2 *Edge1)
+{
+    bool Result = false;;
+    if (Has(Tri, Vertex))
+    {
+        Result = true;
+
+        line2 Edges[3];
+        GetEdges(Tri, Edges);
+        line2 *GoFuckYourselves[] = {Edge0, Edge1};
+        int NumGoFuckYourselves = 0;
+        for (int I = 0; I < ArrayCount(Edges); I++)
+        {
+            if (Has(Edges[I], Vertex))
+            {
+                *GoFuckYourselves[NumGoFuckYourselves++] = Edges[I];
+                break;
+            }
+        }
+    }
+    return Result;
+}
+
+internal bool
+ContainsEndPointStrict(line2 Edge, v2 EndPoint)
+{
+    bool Result = (Edge.P1 == EndPoint || 
+                   Edge.P2 == EndPoint);
+    return Result;
+}
+
+internal bool
+IsInside(tri2 Tri, v2 Point)
+{
+    /* Thanks http://blackpawn.com/texts/pointinpoly/. */
+
+    v2 v0 = Tri.P2 - Tri.P1;
+    v2 v1 = Tri.P3 - Tri.P1;
+    v2 v2 = Point - Tri.P1;
+
+    /* Compute dot products. */
+    float dot00 = GetDot(v0, v0);
+    float dot01 = GetDot(v0, v1);
+    float dot02 = GetDot(v0, v2);
+    float dot11 = GetDot(v1, v1);
+    float dot12 = GetDot(v1, v2);
+
+    /* Compute barycentric coordinates. */
+    float invDenom = 1.0f/(dot00*dot11 - dot01*dot01);
+    float u = invDenom*(dot11*dot02 - dot01*dot12);
+    float v = invDenom*(dot00*dot12 - dot01*dot02);
+
+    /* Check if point is in triangle. */
+    bool Result = (u >= 0) && (v >= 0) && (u + v < 1);
+    return Result;
+}
+
+internal bool
+IsInside(v2 Point, rect2 Rectangle)
+{
+    bool Result = (Point.X >= Rectangle.Min.X && Point.X <= Rectangle.Max.X &&
+                   Point.Y >= Rectangle.Min.Y && Point.Y <= Rectangle.Max.Y);
+    return Result;
+}
+
+internal v2
+GetIntersectionYPlane(ray2 A, float Y)
+{
+    Assert(IsValid(A));
+    /* Get v such that [A.Pos.Y + v*A.Dir.Y == Y]. */
+    float v = (Y - A.Pos.Y)/A.Dir.Y;
+    v2 Result = A.Pos + v*A.Dir;
+    return Result;
+}
+
 internal inline bool
 CheckParallel(ray2 A, ray2 B)
 {
@@ -1186,7 +1581,7 @@ CheckParallel(line2 A, line2 B)
 }
 
 internal bool
-FindIntersection(ray2 A, ray2 B, v2 *PointOfIntersection_Out, bool BackwardsAllowed = false, float *u_Out = 0, float *v_Out = 0)
+GetIntersection(ray2 A, ray2 B, v2 *PointOfIntersection_Out, bool BackwardsAllowed = false, float *u_Out = 0, float *v_Out = 0)
 {
     v2 PointOfIntersection = {};
     float u = 0, v = 0;
@@ -1259,11 +1654,11 @@ FindIntersection(ray2 A, ray2 B, v2 *PointOfIntersection_Out, bool BackwardsAllo
 }
 
 internal bool
-FindIntersection(ray2 Ray, line2 Line, v2 *PointOfIntersection)
+GetIntersection(ray2 Ray, line2 Line, v2 *PointOfIntersection)
 {
     ray2 LineRay = {Line.P1, Line.P2 - Line.P1};
     float u, v;
-    if(!FindIntersection(Ray, LineRay, PointOfIntersection, false, &u, &v))
+    if(!GetIntersection(Ray, LineRay, PointOfIntersection, false, &u, &v))
     {
         return false;
     }
@@ -1273,14 +1668,15 @@ FindIntersection(ray2 Ray, line2 Line, v2 *PointOfIntersection)
 internal bool
 DoesIntersect(ray2 A, ray2 B)
 {
-    bool Result = FindIntersection(A, B, 0);
+    bool Result = GetIntersection(A, B, 0);
     return Result;
 }
 
-/* Copied and pasted from "Real-Time Collision Detection" pg 152. */
 internal bool
-FindIntersection(line2 LineA, line2 LineB, v2 *PointOfIntersection_Out)
+GetIntersection(line2 LineA, line2 LineB, v2 *PointOfIntersection_Out)
 {
+    /* Copied and pasted from "Real-Time Collision Detection" pg 152. */
+
     v2 PointOfIntersection = {};
     bool DoesIntersect = false;
 
@@ -1312,15 +1708,30 @@ FindIntersection(line2 LineA, line2 LineB, v2 *PointOfIntersection_Out)
 internal bool
 DoesIntersect(line2 A, line2 B)
 {
-    bool Result = FindIntersection(A, B, 0);
+    bool Result = GetIntersection(A, B, 0);
     return Result;
 }
 
 internal bool
 Intersects(line2 A, line2 B)
 {
-    bool Result = FindIntersection(A, B, 0);
+    bool Result = GetIntersection(A, B, 0);
     return Result;
+}
+
+internal bool
+Intersects(line2 Line, tri2 Triangle)
+{
+    line2 Edges[3];
+    GetEdges(Triangle, Edges);
+    for (int I = 0; I < 3; I++)
+    {
+        if (Intersects(Line, Edges[I]))
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 /* Print functions. */

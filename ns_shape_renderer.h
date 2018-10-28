@@ -232,6 +232,13 @@ AddQuad(shape_renderer *ShapeRenderer, quad2 Quad, v4 Color, bool IsWireframe = 
 }
 
 internal void
+AddRect(shape_renderer *ShapeRenderer, rect2 Rect, v4 Color, bool IsWireframe = false)
+{
+    quad2 Quad = QUAD2(Rect);
+    AddQuad(ShapeRenderer, Quad, Color, IsWireframe);
+}
+
+internal void
 AddRay(shape_renderer *ShapeRenderer, ray2 Ray, float Length, float LineWidth, v4 Color)
 {
     v2 P1 = Ray.Pos;
