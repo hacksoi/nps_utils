@@ -59,6 +59,19 @@
 #define Log(Format, ...) _Log("%s line %d. " Format, __FILE__, __LINE__, __VA_ARGS__)
 internal void _Log(const char *Format, ...);
 
+#ifdef USE_DEFAULT_LOGGING
+#include <stdarg.h>
+internal void _Log(const char *Format, ...)
+{
+    va_list Args;
+    va_start(Args, Format);
+    vprintf(Format, Args);
+    va_end(Args);
+
+    CrashProgram();
+}
+#endif
+
 #define _CheckEquals(Actual, Expected, Action, WhatToReturn) \
     { \
         long ErrorActual = (long)(Actual); \
@@ -115,8 +128,8 @@ internal void Printf(uint32_t Value);
 #define ArrayCount(Array) (sizeof(Array)/sizeof(Array[0]))
 #define ArrayEnd(Array) (&Array[ArrayCount(Array)])
 
-template <class ArrayPointerType, class Value>
-bool CheckArrayContains(ArrayPointerType Array, int ArrayLength, Value Value)
+template <class ArrayPointerType, class ValueType>
+bool CheckArrayContains(ArrayPointerType Array, int ArrayLength, ValueType Value)
 {
     bool Result = false;
     for (int I = 0; I < ArrayLength; I++)

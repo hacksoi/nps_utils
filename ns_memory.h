@@ -1,6 +1,7 @@
 #ifndef NS_MEMORY_H
 #define NS_MEMORY_H
 
+#include "stdlib.h"
 #include "ns_common.h"
 
 /* @race_condition */
