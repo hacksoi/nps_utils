@@ -11,7 +11,7 @@
 
 char ToLowerCase(char C)
 {
-    char Result = (C >= 'A' && C <= 'Z') ? (C - ('a' - 'A')) : C;
+    char Result = (C >= 'A' && C <= 'Z') ? (C + ('a' - 'A')) : C;
     return Result;
 }
 
@@ -150,17 +150,19 @@ ConvertIntToString(char *Dest, int Value)
 }
 
 inline uint32_t
-ConvertHexStringToInt(char *HexString, char Terminator)
+ConvertHexStringToInt(char *HexString, int HexStringLength)
 {
-    if (HexString[0] && !IsNumber(HexString[1]))
+    if (HexString[0] == '0' && !IsNumber(HexString[1]))
     {
         Assert(ToLowerCase(HexString[1]) == 'x');
         HexString += 2;
+        HexStringLength -= 2;
     }
 
     uint32_t Result = 0;
-    while (*HexString != Terminator)
+    while (HexStringLength--)
     {
+        Assert((*HexString >= '0' && *HexString <= '9') || (ToLowerCase(*HexString) >= 'a' && ToLowerCase(*HexString) <= 'f'));
         Result *= 16;
         Result += ConvertHexCharToInt(*HexString);
         HexString++;
