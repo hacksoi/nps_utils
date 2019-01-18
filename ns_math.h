@@ -251,10 +251,22 @@ ns_math_max(uint32_t A, uint32_t B)
     return Result;
 }
 
+int Max(int A, int B)
+{
+    int Result = A > B ? A : B;
+    return Result;
+}
+
 inline internal float
 Max(float A, float B)
 {
     float Result = A > B ? A : B;
+    return Result;
+}
+
+int Min(int A, int B)
+{
+    int Result = A < B ? A : B;
     return Result;
 }
 

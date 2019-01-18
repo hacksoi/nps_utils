@@ -91,8 +91,8 @@ internal void _Log(const char *Format, ...);
 #define CheckNotEquals_R1(Actual, Expected) _CheckNotEquals(Actual, Expected, , return 1)
 #define CheckEquals_RN(Actual, Expected) _CheckEquals(Actual, Expected, , return NULL)
 #define CheckNotEquals_RN(Actual, Expected) _CheckNotEquals(Actual, Expected, , return NULL)
-#define CheckEquals_RR(Actual, Expected) _CheckEquals(Actual, Expected, , return {})
-#define CheckNotEquals_RR(Actual, Expected) _CheckNotEquals(Actual, Expected, , return {})
+#define CheckEquals_RR(Actual, Expected) _CheckEquals(Actual, Expected, , return Result)
+#define CheckNotEquals_RR(Actual, Expected) _CheckNotEquals(Actual, Expected, , return Result)
 #define CheckNotEquals_AR(Actual, Expected, Action) _CheckNotEquals(Actual, Expected, Action, )
 
 #define CheckSOK_RR(Actual) CheckEquals_RR(Actual, S_OK)
@@ -115,8 +115,8 @@ internal void Printf(uint32_t Value);
 #define ArrayCount(Array) (sizeof(Array)/sizeof(Array[0]))
 #define ArrayEnd(Array) (&Array[ArrayCount(Array)])
 
-template <class ArrayPointerType, class Value>
-bool CheckArrayContains(ArrayPointerType Array, int ArrayLength, Value Value)
+template <typename element_type>
+bool CheckArrayContains(element_type *Array, int ArrayLength, element_type Value)
 {
     bool Result = false;
     for (int I = 0; I < ArrayLength; I++)
@@ -127,6 +127,62 @@ bool CheckArrayContains(ArrayPointerType Array, int ArrayLength, Value Value)
             break;
         }
     }
+    return Result;
+}
+
+template <typename element_type>
+bool CheckForDuplicates(element_type *Array, int ArrayLength)
+{
+    bool Result = false;
+    for (int I = 0; I < ArrayLength; I++)
+    {
+        for (int J = I + 1; J < ArrayLength; J++)
+        {
+            Assert(Array[I] != Array[J]);
+        }
+    }
+    return Result;
+}
+
+template <typename element_type, typename lambda>
+void SortArray(element_type *Array, int ArrayLength, lambda CheckIfLarger)
+{
+    if (ArrayLength <= 1)
+    {
+        return;
+    }
+
+    for (int SortSize = ArrayLength; SortSize > 0; SortSize--)
+    {
+        /* Find max. */
+        int MaxIdx = 0;
+        for (int I = 1; I < SortSize; I++)
+        {
+            if (CheckIfLarger(Array[I], Array[MaxIdx]))
+            {
+                MaxIdx = I;
+            }
+        }
+
+        /* Swap max and end. */
+        element_type Tmp = Array[SortSize - 1];
+        Array[SortSize - 1] = Array[MaxIdx];
+        Array[MaxIdx] = Tmp;
+    }
+}
+
+template <typename element_type, typename lambda>
+int FindSmallest(element_type *Array, int ArrayLength, lambda CheckIfLarger)
+{
+    int SmallestIdx = 0;
+    for (int I = 1; I < ArrayLength; I++)
+    {
+        if (CheckIfLarger(Array[SmallestIdx], Array[I]))
+        {
+            SmallestIdx = I;
+        }
+    }
+    int Result = SmallestIdx;
     return Result;
 }
 

@@ -83,7 +83,7 @@ ns_string_reverse(char *String, int Length)
     }
 }
 
-inline uint32_t
+inline int
 ns_string_from_int(char *Dest, int Value)
 {
     if(Value < 0)
@@ -102,6 +102,25 @@ ns_string_from_int(char *Dest, int Value)
     ns_string_reverse(Dest, NumDigits);
 
     return NumDigits;
+}
+
+int IntToString(char *Dest, int Value)
+{
+    int Result = ns_string_from_int(Dest, Value);
+    return Result;
+}
+
+int StringToInt(char *String)
+{
+    int GetStrLen = strlen(String);
+    int Result = 0;
+    for (int I = 0; I < GetStrLen; I++)
+    {
+        char Digit = String[I] - '0';
+        Result *= 10;
+        Result += Digit;
+    }
+    return Result;
 }
 
 #endif

@@ -44,13 +44,24 @@ struct font_renderer
     font_renderer_type Type;
 };
 
+struct glyph_outline
+{
+    /* Note: the first point of a contour is not included twice */
+    v2 *Points;
+    int NumPoints;
+
+    line2 *Edges;
+    int NumEdges;
+};
+
 /* A glyph outline specified by points. */
 struct glyph_outline_points
 {
-    v2 *Points;
-    /* Note: the first point of a contour is included twice: once at the beginning and the end - this is necessary because 
+    /* Note: the first point of a contour is included twice: once at the beginning and the end - this is necessary because
        the last and first points might have a curve between them. */
+    v2 *Points;
     int NumPoints;
+
     rect2 BoundingBox;
     int *ContourEndIndices;
     int NumContours;
@@ -166,6 +177,7 @@ GetEdge(glyph_outline_points_edge_iterator *Iterator)
     return Result;
 }
 
+#if 0 /* Doesn't work. */
 internal ns_texture
 CreateGlyphTexture(glyph_outline_points *Mesh)
 {
@@ -221,6 +233,7 @@ CreateGlyphTexture(glyph_outline_points *Mesh)
 
     return Result;
 }
+#endif
 
 struct shape_mesh
 {
@@ -287,8 +300,7 @@ CreateFontRenderer(const char *BmfFilename, const char *TgaFilename, uint32_t Wi
 }
 
 /* TODO: Instead of specifying point size, how about pixels? */
-internal glyph_outline_points
-CreateGlyphOutlinePoints(font_renderer *FontRenderer, char Char, int PointSize)
+glyph_outline_points CreateGlyphOutlinePoints(font_renderer *FontRenderer, char Char, int PointSize)
 {
     int DebugNumPoints = GetNumPointsInGlyph(&FontRenderer->TtfFile, Char);
     DebugNumPoints = CalcMaxNumBezierPoints(DebugNumPoints);
@@ -423,19 +435,69 @@ CreateGlyphOutlinePoints(font_renderer *FontRenderer, char Char, int PointSize)
     return Result;
 }
 
-internal void
-ConvertOutlinePointsToEdges(glyph_outline_points *GlyphOutlinePoints, line2 **OutputEdges, int *OutputNumEdges)
+glyph_outline_edges ConvertOutlinePointsToEdges(glyph_outline_points *GlyphOutlinePoints)
 {
+    glyph_outline_edges Result;
+
     line2 *Edges = (line2 *)MemAlloc(sizeof(line2)*GlyphOutlinePoints->NumPoints);
     int NumEdges = 0;
     for (glyph_outline_points_edge_iterator EdgeIterator = GetEdgeIterator(GlyphOutlinePoints); HasMore(&EdgeIterator); Advance(&EdgeIterator))
     {
         Edges[NumEdges++] = GetEdge(&EdgeIterator);
     }
-    Assert(NumEdges == GlyphOutlinePoints->NumPoints - 1);
 
-    *OutputEdges = Edges;
-    *OutputNumEdges = NumEdges;
+    Result.Edges = Edges;
+    Result.NumEdges = NumEdges;
+    return Result;
+}
+
+glyph_outline CreateGlyphOutline(font_renderer *FontRenderer, char Char, int PointSize)
+{
+    glyph_outline Result = {};
+    glyph_outline_points GlyphOutlinePoints = CreateGlyphOutlinePoints(FontRenderer, Char, PointSize);
+    glyph_outline_edges GlyphOutlineEdges = ConvertOutlinePointsToEdges(&GlyphOutlinePoints);
+
+    /* The outline for the contours have the first point duplicated in the first and last indices. User (me) does not want 
+       this, so remove them. */
+    {
+        /* @debug: ... of course, we should make sure that's true! */
+        {
+            int CurContourStartIdx = 0;
+            for (int ContourIdx = 0; ContourIdx < GlyphOutlinePoints.NumContours; ContourIdx++)
+            {
+                int ContourEndIdx = GlyphOutlinePoints.ContourEndIndices[ContourIdx];
+                Assert(GlyphOutlinePoints.Points[ContourEndIdx] == GlyphOutlinePoints.Points[CurContourStartIdx]);
+                CurContourStartIdx = ContourEndIdx + 1;
+            }
+        }
+
+        for (int ContourIdx = 0; ContourIdx < GlyphOutlinePoints.NumContours; ContourIdx++)
+        {
+            int ContourEndIdx = GlyphOutlinePoints.ContourEndIndices[ContourIdx];
+
+            /* Remove contour end point. I think we should retain ordering. don't want to surpise user (me). */
+            for (int PointsIdx = ContourEndIdx; PointsIdx < GlyphOutlinePoints.NumPoints - 1; PointsIdx++)
+            {
+                GlyphOutlinePoints.Points[PointsIdx] = GlyphOutlinePoints.Points[PointsIdx + 1];
+            }
+            GlyphOutlinePoints.NumPoints--;
+
+            /* We also have to decrement the end indices! */
+            for (int DecrementContourIdx = ContourIdx + 1; DecrementContourIdx < GlyphOutlinePoints.NumContours; DecrementContourIdx++)
+            {
+                GlyphOutlinePoints.ContourEndIndices[DecrementContourIdx]--;
+            }
+        }
+    }
+
+    Assert(!CheckForDuplicates(GlyphOutlinePoints.Points, GlyphOutlinePoints.NumPoints));
+    Assert(!CheckForDuplicates(GlyphOutlineEdges.Edges, GlyphOutlineEdges.NumEdges));
+
+    Result.Points = GlyphOutlinePoints.Points;
+    Result.NumPoints = GlyphOutlinePoints.NumPoints;
+    Result.Edges = GlyphOutlineEdges.Edges;
+    Result.NumEdges = GlyphOutlineEdges.NumEdges;
+    return Result;
 }
 
 internal void
@@ -546,18 +608,6 @@ DrawString(font_renderer *FontRenderer, const char *String, float StringPosX, fl
         } break;
     }
 #endif
-}
-
-internal void
-Free(glyph_outline_points *GlyphMesh)
-{
-    MemFree(GlyphMesh->Points);
-}
-
-internal void
-Free(glyph_outline_edges *Outline)
-{
-    MemFree(Outline->Edges);
 }
 
 internal void

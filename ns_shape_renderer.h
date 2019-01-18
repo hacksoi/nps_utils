@@ -195,7 +195,7 @@ Add(shape_renderer *ShapeRenderer, v2 P, v4 Color)
 }
 
 internal void
-AddPoint(shape_renderer *ShapeRenderer, v2 P, float PointSize, v4 Color)
+AddPoint(shape_renderer *ShapeRenderer, v2 P, v4 Color = GLUTILS_WHITE, float PointSize = 5.0f)
 {
     bool ForceFlushIfSame = ShapeRenderer->PointSize != PointSize;
     CheckFlush(ShapeRenderer, ShapeType_Point, 1*SHAPE_RENDERER_BYTES_PER_VERTEX, ForceFlushIfSame);
@@ -204,7 +204,7 @@ AddPoint(shape_renderer *ShapeRenderer, v2 P, float PointSize, v4 Color)
 }
 
 internal void
-AddLine(shape_renderer *ShapeRenderer, line2 Line, float LineWidth, v4 Color)
+AddLine(shape_renderer *ShapeRenderer, line2 Line, float LineWidth = 1.0f, v4 Color = GLUTILS_WHITE)
 {
     bool ForceFlushIfSame = ShapeRenderer->LineWidth != LineWidth;
     CheckFlush(ShapeRenderer, ShapeType_Line, 2*SHAPE_RENDERER_BYTES_PER_VERTEX, ForceFlushIfSame);
@@ -214,7 +214,7 @@ AddLine(shape_renderer *ShapeRenderer, line2 Line, float LineWidth, v4 Color)
 }
 
 internal void
-AddTriangle(shape_renderer *ShapeRenderer, tri2 Tri, v4 Color, bool IsWireframe = false)
+AddTriangle(shape_renderer *ShapeRenderer, tri2 Tri, v4 Color = GLUTILS_WHITE, bool IsWireframe = false)
 {
     bool ForceFlushIfSame = ShapeRenderer->IsWireframe != IsWireframe;
     CheckFlush(ShapeRenderer, ShapeType_Triangle, 3*SHAPE_RENDERER_BYTES_PER_VERTEX, ForceFlushIfSame);
@@ -225,21 +225,21 @@ AddTriangle(shape_renderer *ShapeRenderer, tri2 Tri, v4 Color, bool IsWireframe 
 }
 
 internal void
-AddQuad(shape_renderer *ShapeRenderer, quad2 Quad, v4 Color, bool IsWireframe = false)
+AddQuad(shape_renderer *ShapeRenderer, quad2 Quad, v4 Color = GLUTILS_WHITE, bool IsWireframe = false)
 {
     AddTriangle(ShapeRenderer, TRI2(Quad.BottomLeft, Quad.BottomRight, Quad.TopRight), Color, IsWireframe);
     AddTriangle(ShapeRenderer, TRI2(Quad.BottomLeft, Quad.TopRight, Quad.TopLeft), Color, IsWireframe);
 }
 
 internal void
-AddRect(shape_renderer *ShapeRenderer, rect2 Rect, v4 Color, bool IsWireframe = false)
+AddRect(shape_renderer *ShapeRenderer, rect2 Rect, v4 Color = GLUTILS_WHITE, bool IsWireframe = false)
 {
     quad2 Quad = QUAD2(Rect);
     AddQuad(ShapeRenderer, Quad, Color, IsWireframe);
 }
 
 internal void
-AddRay(shape_renderer *ShapeRenderer, ray2 Ray, float Length, float LineWidth, v4 Color)
+AddRay(shape_renderer *ShapeRenderer, ray2 Ray, float Length, float LineWidth, v4 Color = GLUTILS_WHITE)
 {
     v2 P1 = Ray.Pos;
     v2 P2 = Ray.Pos + Length*Ray.Dir;
@@ -248,7 +248,7 @@ AddRay(shape_renderer *ShapeRenderer, ray2 Ray, float Length, float LineWidth, v
 }
 
 internal void
-AddCircle(shape_renderer *ShapeRenderer, v2 Pos, float Radius, v4 Color, bool IsWireframe = false)
+AddCircle(shape_renderer *ShapeRenderer, v2 Pos, float Radius, v4 Color = GLUTILS_WHITE, bool IsWireframe = false)
 {
     int NumCirclePoints = 64;
     int MaxNumVertices = NumCirclePoints + 2;

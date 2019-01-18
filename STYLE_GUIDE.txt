@@ -1,6 +1,6 @@
 Prepend all functions, structs/classes, and macros with ns/Ns/NS.
     -Reasoning for functions:
-        Argument: Shouldn't overloaded functions and custom data types will prevent conflicts with the user's codebase? 
+        Argument: Shouldn't overloaded functions and custom data types prevent conflicts with the user's codebase? 
         Rebuttal: No, because some of our functions may take primitives (for example, min and max). 
 
         Argument: If there are conflicts, isn't it the user's fault for having two methods in his codebase for doing the same thing? For example, if he is getting conflicts with our string library, shouldn't he just get rid of his own string library?

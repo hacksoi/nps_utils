@@ -25,6 +25,8 @@ global v4 GLUTILS_BLUE = {0.0f, 0.0f, 1.0f, 1.0f};
 global v4 GLUTILS_CYAN = {0.0f, 1.0f, 1.0f, 1.0f};
 global v4 GLUTILS_YELLOW = {1.0f, 1.0f, 0.0f, 1.0f};
 global v4 GLUTILS_ORANGE = ns_hex_string_to_vec("ffa500");
+global v4 GLUTILS_PURPLE = ns_hex_string_to_vec("800080");
+global v4 GLUTILS_PINK = ns_hex_string_to_vec("ff69b4");
 
 // The default calling convention is __cdecl. Unfortunately, the OpenGL functions are defined
 typedef void __stdcall opengl_get_error_info(GLuint globject, GLsizei maxLength, GLsizei *length, GLchar *infoLog); // i.e. glGetShaderInfoLog()
