@@ -40,7 +40,7 @@ LoadTga(const char *Filename)
 internal void
 Free(ns_tga Tga)
 {
-    Free(Tga.File);
+    Free(&Tga.File);
 }
 
 #endif

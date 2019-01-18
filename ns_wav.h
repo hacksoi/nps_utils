@@ -116,7 +116,7 @@ LoadWav(const char *Filename)
 internal void
 Free(ns_wav Wav)
 {
-    Free(Wav.File);
+    Free(&Wav.File);
 }
 
 #endif

@@ -59,57 +59,6 @@ void ns_put64be(uint8_t *dest, uint64_t src)
     dest[7] = (uint8_t)((src & 0x00000000000000ff) >>  0);
 }
 
-/* Hex */
-
-inline internal int ns_hex_to_int(char HexChar)
-{
-    int Result = -1;
-    if(HexChar >= '0' && HexChar <= '9')
-    {
-        Result = HexChar - '0';
-    }
-    else if(HexChar >= 'A' && HexChar <= 'F')
-    {
-        Result = HexChar - 'A' + 10;
-    }
-    else if(HexChar >= 'a' && HexChar <= 'f')
-    {
-        Result = HexChar - 'a' + 10;
-    }
-    return Result;
-}
-
-inline internal int ns_hex_to_int(const char *HexString, uint64_t Length = 0)
-{
-    if(Length == 0)
-    {
-        Length = strlen(HexString);
-    }
-
-    uint32_t Result = 0;
-    for(uint32_t i = 0; i < Length; i++)
-    {
-        Result *= 16;
-        Result += ns_hex_to_int(HexString[i]);
-    }
-    return Result;
-}
-
-/* i.e. "FFFFFF" to (1, 1, 1, 1) */
-inline internal v4 ns_hex_string_to_vec(const char *HexString)
-{
-    Assert(strlen(HexString) == 6);
-
-    v4 Result;
-    for(int i = 0; i < 3; i++)
-    {
-        const char *ColorValue = &HexString[2*i];
-        Result[i] = (ns_hex_to_int(ColorValue, 2) / 255.0f);
-    }
-    Result[3] = 1.0f;
-    return Result;
-}
-
 /* Base64 */
 
 inline char ns_to_base64(int Value)
@@ -140,6 +89,21 @@ inline char ns_to_base64(int Value)
         Result = -1;
     }
     return (char)Result;
+}
+
+/* i.e. "FFFFFF" to (1, 1, 1, 1) */
+inline internal v4 ns_hex_string_to_vec(const char *HexString)
+{
+    Assert(strlen(HexString) == 6);
+
+    v4 Result;
+    for(int i = 0; i < 3; i++)
+    {
+        char *ColorValue = (char *)&HexString[2*i];
+        Result[i] = (ConvertHexStringToInt(ColorValue, 2) / 255.0f);
+    }
+    Result[3] = 1.0f;
+    return Result;
 }
 
 #endif

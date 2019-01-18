@@ -2,7 +2,9 @@
 #define NS_FILES_H
 
 #include "ns_common.h"
+#include "ns_memory.h"
 
+#if 0 /* Just use the standard library FFS. */
 #if defined(WINDOWS)
 #elif defined(LINUX)
     #include <unistd.h>
@@ -104,11 +106,12 @@ ns_file_load(NsFile *file, char *buffer, int buffer_size)
 
     return bytes_read;
 }
+#endif
 
 struct ns_file
 {
     uint8_t *Contents;
-    uint32_t Size;
+    int Size;
 };
 
 internal ns_file
@@ -139,9 +142,9 @@ LoadFile(const char *Filename)
 }
 
 internal void
-Free(ns_file File)
+Free(ns_file *File)
 {
-    MemFree(File.Contents);
+    MemFree(File->Contents);
 }
 
 #endif
