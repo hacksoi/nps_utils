@@ -1,7 +1,7 @@
 /* This file contains code for things that should probably be pulled out into their own file, but I don't really have a reason
    to do right now. */
 
-#if 0 /* Chaikin */
+#if 0 /* Chaikin and that cool snake/sperm thing. */
 
 v2 RawPoints[2000];
 int NumRawPoints;
@@ -699,7 +699,7 @@ DoDelaunay(v2 *Points, int NumPoints)
 }
 #endif
 
-#if 0 /* Slow way of creating triangulation. This is n^3. */
+#if 0 /* Slow way of creating triangulation. This is n^3. Not only slow, but it's wrong too. Doesn't handle all cases. */
 triangulation_result CreateTriangulationSlow(v2 *Points, int NumPoints,
                                              line2 *ConstraintEdges, int NumConstraintEdges)
 {

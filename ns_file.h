@@ -141,6 +141,16 @@ LoadFile(const char *Filename)
     return Result;
 }
 
+int GetFileSize(FILE *File)
+{
+    int Result = 0;
+    CheckZero_RR(fseek(File, 0, SEEK_END));
+    Result = ftell(File);
+    CheckNotNeg1_RR(Result);
+    CheckZero_RR(fseek(File, 0, SEEK_SET));
+    return Result;
+}
+
 internal void
 Free(ns_file *File)
 {

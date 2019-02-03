@@ -195,6 +195,7 @@ CreateShaderProgramVGF(const char *VertexShaderSource, const char *GeometryShade
     return ShaderProgram;
 }
 
+/* Note that the VBO should already be bound. */
 inline internal void
 SetVertexAttributeFloat(uint32_t VertexAttributeIndex, uint32_t ElementsPerAttribute, uint32_t StrideInFloats, uint32_t OffsetInFloats)
 {

@@ -64,6 +64,12 @@ int StrLen(char *String)
     return Result;
 }
 
+int StrLen(const char *String)
+{
+    int Result = (int)strlen((char *)String);
+    return Result;
+}
+
 int
 StrCmp(char *String1, char *String2)
 {
@@ -165,16 +171,22 @@ int IntToString(char *Dest, int Value)
     return Result;
 }
 
-int StringToInt(char *String)
+int StringToInt(char *String, int StrLen)
 {
-    int GetStrLen = strlen(String);
     int Result = 0;
-    for (int I = 0; I < GetStrLen; I++)
+    for (int I = 0; I < StrLen; I++)
     {
         char Digit = String[I] - '0';
         Result *= 10;
         Result += Digit;
     }
+    return Result;
+}
+
+int StringToInt(char *String)
+{
+    int StrLen = strlen(String);
+    int Result = StringToInt(String, StrLen);
     return Result;
 }
 

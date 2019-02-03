@@ -14,7 +14,7 @@
 
 #define ROOT2 1.4142135623730950488016887242097f
 
-#define TOLERANCE 0.0001f
+#define TOLERANCE 0.0003f
 
 #define EXPANDV2(V) V.X, V.Y
 #define EXPANDV3(V) V.X, V.Y, V.Z
@@ -99,6 +99,13 @@ GetMagnitude(Complex A)
     return Result;
 }
 
+inline internal bool
+IsWithinTolerance(float ActualValue, float Value)
+{
+    bool Result = (ActualValue > Value - TOLERANCE) && (ActualValue < Value + TOLERANCE);
+    return Result;
+}
+
 inline internal float
 ToRadians(float Degrees)
 {
@@ -144,7 +151,7 @@ Exp(float X)
 inline internal float
 Acos(float Value)
 {
-    Assert(Value <= 1.0f && Value >= -1.0f);
+    Assert((Value < 1.0f || IsWithinTolerance(Value, 1.0f)) && (Value > -1.0f || IsWithinTolerance(Value, -1.0f)));
     float Result = acosf(Value);
     return Result;
 }
@@ -213,13 +220,6 @@ inline internal float
 Abs(float X)
 {
     float Result = X < 0 ? -X : X;
-    return Result;
-}
-
-inline internal bool
-IsWithinTolerance(float ActualValue, float Value)
-{
-    bool Result = (ActualValue > Value - TOLERANCE) && (ActualValue < Value + TOLERANCE);
     return Result;
 }
 

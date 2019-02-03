@@ -1,6 +1,10 @@
 #ifndef NS_BMF
 #define NS_BMF
 
+/* Refer to http://www.angelcode.com/products/bmfont/doc/file_format.html for file format. Basically, there are 4 block types: 
+   info, common, pages, and chars. Each BMF file has one info block, common block, and pages block - they're in that order. 
+   Then there's one chars block for each char. */
+
 /* TODO: kerning pairs */
 
 #include "ns_string.h"
@@ -85,12 +89,8 @@ struct ns_bmf
     bmf_char *
     GetChar(int Idx)
     {
-        bmf_char *Char = this->Chars;
-        while (Idx--)
-        {
-            Char++;
-        }
-        return Char;
+        bmf_char *Result = &this->Chars[Idx];
+        return Result;
     }
 };
 

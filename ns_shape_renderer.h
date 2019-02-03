@@ -225,17 +225,27 @@ AddTriangle(shape_renderer *ShapeRenderer, tri2 Tri, v4 Color = GLUTILS_WHITE, b
 }
 
 internal void
-AddQuad(shape_renderer *ShapeRenderer, quad2 Quad, v4 Color = GLUTILS_WHITE, bool IsWireframe = false)
+AddQuad(shape_renderer *ShapeRenderer, quad2 Quad, v4 Color = GLUTILS_WHITE, bool IsOutline = false)
 {
-    AddTriangle(ShapeRenderer, TRI2(Quad.BottomLeft, Quad.BottomRight, Quad.TopRight), Color, IsWireframe);
-    AddTriangle(ShapeRenderer, TRI2(Quad.BottomLeft, Quad.TopRight, Quad.TopLeft), Color, IsWireframe);
+    if (IsOutline)
+    {
+        AddLine(ShapeRenderer, LINE2(Quad.BottomLeft, Quad.BottomRight), 1.0f, Color);
+        AddLine(ShapeRenderer, LINE2(Quad.BottomRight, Quad.TopRight), 1.0f, Color);
+        AddLine(ShapeRenderer, LINE2(Quad.TopRight, Quad.TopLeft), 1.0f, Color);
+        AddLine(ShapeRenderer, LINE2(Quad.TopLeft, Quad.BottomLeft), 1.0f, Color);
+    }
+    else
+    {
+        AddTriangle(ShapeRenderer, TRI2(Quad.BottomLeft, Quad.BottomRight, Quad.TopRight), Color);
+        AddTriangle(ShapeRenderer, TRI2(Quad.BottomLeft, Quad.TopRight, Quad.TopLeft), Color);
+    }
 }
 
 internal void
-AddRect(shape_renderer *ShapeRenderer, rect2 Rect, v4 Color = GLUTILS_WHITE, bool IsWireframe = false)
+AddRect(shape_renderer *ShapeRenderer, rect2 Rect, v4 Color = GLUTILS_WHITE, bool IsOutline = false)
 {
     quad2 Quad = QUAD2(Rect);
-    AddQuad(ShapeRenderer, Quad, Color, IsWireframe);
+    AddQuad(ShapeRenderer, Quad, Color, IsOutline);
 }
 
 internal void

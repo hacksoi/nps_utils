@@ -131,6 +131,15 @@ bool CheckArrayContains(element_type *Array, int ArrayLength, element_type Value
 }
 
 template <typename element_type>
+void RemoveArrayElement(element_type *Array, int ArrayLength, int RemoveIdx)
+{
+    for (int I = RemoveIdx; I < ArrayLength - 1; I++)
+    {
+        Array[I] = Array[I + 1];
+    }
+}
+
+template <typename element_type>
 bool CheckForDuplicates(element_type *Array, int ArrayLength)
 {
     bool Result = false;

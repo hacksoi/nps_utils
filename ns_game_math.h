@@ -13,10 +13,10 @@ union v2
         float X, Y;
     };
 
-    inline float &operator[](int ComponentIdx);
-    inline void operator+=(v2 A);
-    inline void operator-=(v2 A);
-    inline void operator*=(float A);
+    float &operator[](int ComponentIdx);
+    void operator+=(v2 A);
+    void operator-=(v2 A);
+    void operator*=(float A);
 };
 
 union v3
@@ -28,9 +28,9 @@ union v3
         float X, Y, Z;
     };
 
-    inline float &operator[](int ComponentIdx);
-    inline void operator+=(v3 A);
-    inline void operator-=(v3 A);
+    float &operator[](int ComponentIdx);
+    void operator+=(v3 A);
+    void operator-=(v3 A);
 };
 
 union v4
@@ -53,7 +53,7 @@ union v4
         float _Ignored0;
     };
 
-    inline float &operator[](int ComponentIdx);
+    float &operator[](int ComponentIdx);
 };
 
 struct quaternion
@@ -125,12 +125,19 @@ struct rect2
     void operator-=(v2);
 };
 
-struct quad2
+union quad2
 {
-    v2 BottomLeft;
-    v2 BottomRight;
-    v2 TopRight;
-    v2 TopLeft;
+    struct
+    {
+        v2 BottomLeft;
+        v2 BottomRight;
+        v2 TopRight;
+        v2 TopLeft;
+    };
+
+    v2 Verts[4];
+
+    void operator+=(v2);
 };
 
 #define RECT_BOTTOMLEFT 0
@@ -177,7 +184,7 @@ union tri2
 };
 
 
-/* Vectors */
+/* Vertices */
 
 void
 Print(v2 V)
@@ -380,6 +387,26 @@ DoCross(v2 A, v2 B)
     return Result;
 }
 
+line2 LINE2(v2, v2);
+bool CheckCCW(v2 A, v2 B, v2 C)
+{
+    /* Copied and pasted from https://stackoverflow.com/questions/1165647/how-to-determine-if-a-list-of-polygon-points-are-in-clockwise-order. */
+
+    line2 Edge0 = LINE2(A, B);
+    line2 Edge1 = LINE2(B, C);
+    line2 Edge2 = LINE2(C, A);
+
+    float Edge0Thing = (Edge0.P2.X - Edge0.P1.X)*(Edge0.P1.Y + Edge0.P2.Y);
+    float Edge1Thing = (Edge1.P2.X - Edge1.P1.X)*(Edge1.P1.Y + Edge1.P2.Y);
+    float Edge2Thing = (Edge2.P2.X - Edge2.P1.X)*(Edge2.P1.Y + Edge2.P2.Y);
+
+    float ThingSum = Edge0Thing + Edge1Thing + Edge2Thing;
+    Assert(ThingSum != 0.0f);
+
+    bool IsCCW = ThingSum < 0.0f;
+    return IsCCW;
+}
+
 inline float
 GetLength(v2 *V)
 {
@@ -468,6 +495,15 @@ angle_direction GetDirectionBetween(v2 A, v2 B)
 }
 
 v2 GetDirection(line2);
+angle_direction GetDirectionBetween(line2 L, v2 V)
+{
+    v2 LDir = GetDirection(L);
+    v2 LVDiff = V - L.P1;
+    v2 LVDir = Normalize(LVDiff);
+    angle_direction Result = GetDirectionBetween(LDir, LVDir);
+    return Result;
+}
+
 angle_direction GetDirectionBetween(line2 A, line2 B)
 {
     v2 ADir = GetDirection(A);
@@ -530,18 +566,23 @@ Lerp(v3 A, v3 B, float t)
     return Result;
 }
 
-inline v2
-Rotate(v2 V, float AngleDegrees)
+void Rotate(v2 *V, float AngleRads)
 {
-    float AngleRadians = ToRadians(AngleDegrees);
-    float sin = Sin(AngleRadians);
-    float cos = Cos(AngleRadians);
+    float sin = Sin(AngleRads);
+    float cos = Cos(AngleRads);
 
+    /* Note that since we must reference the original X after we set X, we have to do this. */
     v2 Result = {
-        V.X*cos - V.Y*sin,
-        V.X*sin + V.Y*cos,
+        V->X*cos - V->Y*sin,
+        V->X*sin + V->Y*cos,
     };
-    return Result;
+    *V = Result;
+}
+
+v2 Rotate(v2 V, float AngleRads)
+{
+    Rotate(&V, AngleRads);
+    return V;
 }
 
 /* Rotates V around P. */
@@ -573,7 +614,7 @@ float GetSignedArea(v2, v2, v2);
 bool CheckCollinear(v2 A, v2 B, v2 C)
 {
     float Area = GetSignedArea(A, B, C);
-    bool Result = (Area == 0.0f);
+    bool Result = IsWithinTolerance(Area, 0.0f);
     return Result;
 }
 
@@ -1030,7 +1071,7 @@ EnsureEndPointIsFirst(line2 *Line, v2 Endpoint)
     }
 }
 
-bool CheckContainsSameVertex(line2 L, v2 V)
+bool CheckContains(line2 L, v2 V)
 {
     bool Result = L.P1 == V || L.P2 == V;
     return Result;
@@ -1146,6 +1187,15 @@ float GetAngleBetween(line2 A, line2 B, angle_direction AngleDirection = AngleDi
     v2 ADiff = Normalize(A.P2 - A.P1);
     v2 BDiff = Normalize(B.P2 - B.P1);
     float Result = GetAngleBetween(ADiff, BDiff, AngleDirection);
+    return Result;
+}
+
+bool CheckPointCCW(line2 L, v2 V)
+{
+    v2 LDiff = L.P2 - L.P1;
+    v2 LVDiff = L.P2 - V;
+    angle_direction AngleDir = GetDirectionBetween(LDiff, LVDiff);
+    bool Result = AngleDir == AngleDirection_CCW;
     return Result;
 }
 
@@ -1296,25 +1346,30 @@ Split(tri2 Tri, v2 P, tri2 *OutputTris)
     OutputTris[2] = TRI2(Tri.P2, Tri.P3, P);
 }
 
-bool CheckHasAnyCommonVertices(tri2 A, tri2 B, v2 *CommonVertex_Out = NULL)
+int GetCommonVertices(tri2 A, tri2 B, v2 *CommonVertices_Out = NULL)
 {
-    bool Result = false;
+    int NumCommonVerts = 0;
     for (int I = 0; I < 3; I++)
     {
         for (int J = 0; J < 3; J++)
         {
             if (A.Verts[I] == B.Verts[J])
             {
-                Result = true;
-                if (CommonVertex_Out)
+                if (CommonVertices_Out)
                 {
-                    *CommonVertex_Out = A.Verts[I];
+                    CommonVertices_Out[NumCommonVerts] = A.Verts[I];
                 }
-                goto end;
+                NumCommonVerts++;
             }
         }
     }
-end:
+    return NumCommonVerts;
+}
+
+bool CheckContainsAnySameVertices(tri2 A, tri2 B)
+{
+    int NumCommonVerts = GetCommonVertices(A, B);
+    bool Result = NumCommonVerts > 0;
     return Result;
 }
 
@@ -1336,7 +1391,7 @@ GetEdge(tri2 Tri, int Index)
 }
 
 bool operator==(line2, line2);
-bool CheckHasCommonEdge(tri2 A, tri2 B, line2 *CommonEdge_Out = NULL)
+bool CheckContainsCommonEdge(tri2 A, tri2 B, line2 *CommonEdge_Out = NULL)
 {
     line2 AEdges[3], BEdges[3];
     GetEdges(A, AEdges);
@@ -1386,7 +1441,7 @@ GetEdgesExcluding(tri2 Tri, line2 EdgeToExclude, line2 *OutputEdges)
     }
 }
 
-bool CheckContainsSameVertex(tri2 Tri, v2 V)
+bool CheckContains(tri2 Tri, v2 V)
 {
     bool Result = (Tri.P1 == V || Tri.P2 == V || Tri.P3 == V);
     return Result;
@@ -1394,14 +1449,14 @@ bool CheckContainsSameVertex(tri2 Tri, v2 V)
 
 line2 GetEdgeExcluding(tri2 Tri, v2 Vertex)
 {
-    Assert(CheckContainsSameVertex(Tri, Vertex));
+    Assert(CheckContains(Tri, Vertex));
 
     line2 Result = {};
     line2 Edges[3];
     GetEdges(Tri, Edges);
     for (int I = 0; I < 3; I++)
     {
-        if (!CheckContainsSameVertex(Edges[I], Vertex))
+        if (!CheckContains(Edges[I], Vertex))
         {
             Result = Edges[I];
             break;
@@ -1413,17 +1468,17 @@ line2 GetEdgeExcluding(tri2 Tri, v2 Vertex)
 v2 GetVertexExcluding(tri2 Tri, line2 EdgeToExclude)
 {
     v2 Result;
-    if (!CheckContainsSameVertex(EdgeToExclude, Tri.P1))
+    if (!CheckContains(EdgeToExclude, Tri.P1))
     {
         Result = Tri.P1;
     }
-    else if (!CheckContainsSameVertex(EdgeToExclude, Tri.P2))
+    else if (!CheckContains(EdgeToExclude, Tri.P2))
     {
         Result = Tri.P2;
     }
     else
     {
-        Assert(!CheckContainsSameVertex(EdgeToExclude, Tri.P3));
+        Assert(!CheckContains(EdgeToExclude, Tri.P3));
         Result = Tri.P3;
     }
     return Result;
@@ -1451,7 +1506,7 @@ bool CheckContainsOneVertexOf(tri2 Tri, line2 Edge, v2 *SharedVertex, v2 *NonSha
     /* Caller only expects one vertex of the edge to be shared with the triangle, not the whole edge. Make sure that's true.  */
     if (!CheckContains(Tri, Edge))
     {
-        if (CheckContainsSameVertex(Tri, Edge.P1))
+        if (CheckContains(Tri, Edge.P1))
         {
             *SharedVertex = Edge.P1;
             *NonSharedVertex = Edge.P2;
@@ -1470,15 +1525,9 @@ bool CheckContainsOneVertexOf(tri2 Tri, line2 Edge, v2 *SharedVertex, v2 *NonSha
     return Result;
 }
 
-bool CheckHasAnyCommonVertices(tri2 Tri, line2 Edge)
+bool CheckContainsAnySameVertices(tri2 Tri, line2 Edge)
 {
-    bool Result = (CheckContainsSameVertex(Tri, Edge.P1) || CheckContainsSameVertex(Tri, Edge.P2));
-    return Result;
-}
-
-bool CheckContainsVertex(tri2 Tri, v2 V)
-{
-    bool Result = (Tri.P1 == V || Tri.P2 == V || Tri.P3 == V);
+    bool Result = (CheckContains(Tri, Edge.P1) || CheckContains(Tri, Edge.P2));
     return Result;
 }
 
@@ -1683,7 +1732,14 @@ rect2 CreateBoundingBox(v2 *Points, int NumPoints)
 
 /* Quads */
 
-#if 0
+void quad2::operator+=(v2 V)
+{
+    this->BottomLeft += V;
+    this->BottomRight += V;
+    this->TopRight += V;
+    this->TopLeft += V;
+}
+
 quad2
 operator*(float A, quad2 B)
 {
@@ -1694,7 +1750,6 @@ operator*(float A, quad2 B)
     Result.TopLeft = A*B.TopLeft;
     return Result;
 }
-#endif
 
 quad2
 QUAD2(v2 BottomLeft, v2 BottomRight, v2 TopRight, v2 TopLeft)
@@ -1733,6 +1788,23 @@ GetCorners(quad2 Quad, v2 *Corners)
     Corners[3] = Quad.TopLeft;
 }
 
+quad2 MultiplyXBy(quad2 Quad, float A)
+{
+    Quad.BottomLeft.X *= A;
+    Quad.BottomRight.X *= A;
+    Quad.TopLeft.X *= A;
+    Quad.TopRight.X *= A;
+    return Quad;
+}
+
+void Rotate(quad2 *Quad, float RotAngle)
+{
+    Rotate(&Quad->BottomLeft, RotAngle);
+    Rotate(&Quad->BottomRight, RotAngle);
+    Rotate(&Quad->TopLeft, RotAngle);
+    Rotate(&Quad->TopRight, RotAngle);
+}
+
 quad2_3d
 GetPlaneCorners(plane Plane, float Size)
 {
@@ -1757,20 +1829,19 @@ GetPlaneCorners(plane Plane, float Size)
     return Result;
 }
 
-/* Intersections */
-
-bool CheckContains(line2 L, v2 V)
+quad2 CreateBoundingQuad(v2 *Points, int NumPoints)
 {
-    bool Result = (L.P1 == V ||
-                   L.P2 == V);
+    rect2 BoundingBox = CreateBoundingBox(Points, NumPoints);
+    quad2 Result = QUAD2(BoundingBox);
     return Result;
 }
 
-/* Returns */
+/* Intersections */
+
 bool
 GetAdjacentEdges(tri2 Tri, v2 Vertex, line2 *Out_Edge0, line2 *Out_Edge1)
 {
-    bool Result = CheckContainsVertex(Tri, Vertex);
+    bool Result = CheckContains(Tri, Vertex);
     if (Result)
     {
         line2 Edges[3];
@@ -1790,40 +1861,108 @@ GetAdjacentEdges(tri2 Tri, v2 Vertex, line2 *Out_Edge0, line2 *Out_Edge1)
     return Result;
 }
 
+bool CheckOverlaps(v2 P, line2 L)
+{
+    bool Result = false;
+
+    if (CheckCollinear(P, L.P1, L.P2))
+    {
+        /* Now check to see if they overlap. */
+
+        v2 A = L.P1;
+        v2 B = L.P2;
+
+        /* Do X. */
+        {
+            /* Ensure A < B. */
+            if (A.X > B.X)
+            {
+                float Tmp = A.X;
+                A.X = B.X;
+                B.X = Tmp;
+            }
+
+            if (P.X > A.X && P.X < B.X)
+            {
+                Result = true;
+            }
+        }
+
+        /* Do Y. */
+        {
+            /* Ensure A < B. */
+            if (A.Y > B.Y)
+            {
+                float Tmp = A.Y;
+                A.Y = B.Y;
+                B.Y = Tmp;
+            }
+
+            if (P.Y > A.Y && P.Y < B.Y)
+            {
+                Result = true;
+            }
+        }
+    }
+
+    return Result;
+}
+
 bool CheckInside(v2 Point, tri2 Tri, bool *IsPointOnEdge_Out = NULL)
 {
-    /* Thanks http://blackpawn.com/texts/pointinpoly/. */
+    bool Result = false;
 
-    v2 v0 = Tri.P2 - Tri.P1;
-    v2 v1 = Tri.P3 - Tri.P1;
-    v2 v2 = Point - Tri.P1;
-
-    /* Compute dot products. */
-    float dot00 = GetDot(v0, v0);
-    float dot01 = GetDot(v0, v1);
-    float dot02 = GetDot(v0, v2);
-    float dot11 = GetDot(v1, v1);
-    float dot12 = GetDot(v1, v2);
-
-    /* Compute barycentric coordinates. */
-    float invDenom = 1.0f/(dot00*dot11 - dot01*dot01);
-    float u = invDenom*(dot11*dot02 - dot01*dot12);
-    float v = invDenom*(dot00*dot12 - dot01*dot02);
-    float uv = u + v;
-
-    /* Check if point is in triangle. */
-    bool Result = (u >= 0) && (v >= 0) && (uv <= 1.0f || IsWithinTolerance(uv, 1.0f));
-    if (IsPointOnEdge_Out)
+    /* We want to see if the point is on one of the edges of the triangle. */
+    line2 Edges[3];
+    GetEdges(Tri, Edges);
+    for (int EdgeIdx = 0; EdgeIdx < ArrayCount(Edges); EdgeIdx++)
     {
-        if (Result)
+        line2 Edge = Edges[EdgeIdx];
+        if (CheckOverlaps(Point, Edge))
         {
-            *IsPointOnEdge_Out = (u == 0) || (v == 0) || IsWithinTolerance(uv, 1.0f);
+            Result = true;
+            break;
         }
-        else
+    }
+    if (Result)
+    {
+        /* We're done! */
+
+        if (IsPointOnEdge_Out)
+        {
+            *IsPointOnEdge_Out = true;
+        }
+    }
+    else
+    {
+        if (IsPointOnEdge_Out)
         {
             *IsPointOnEdge_Out = false;
         }
+
+        /* Thanks http://blackpawn.com/texts/pointinpoly/. */
+
+        v2 v0 = Tri.P2 - Tri.P1;
+        v2 v1 = Tri.P3 - Tri.P1;
+        v2 v2 = Point - Tri.P1;
+
+        /* Compute dot products. */
+        float dot00 = GetDot(v0, v0);
+        float dot01 = GetDot(v0, v1);
+        float dot02 = GetDot(v0, v2);
+        float dot11 = GetDot(v1, v1);
+        float dot12 = GetDot(v1, v2);
+
+        /* Compute barycentric coordinates. */
+        float invDenom = 1.0f/(dot00*dot11 - dot01*dot01);
+        float u = invDenom*(dot11*dot02 - dot01*dot12);
+        float v = invDenom*(dot00*dot12 - dot01*dot02);
+        float uv = u + v;
+
+        /* Check if point is in triangle. */
+        Result = ((u > 0.0f) && (v > 0.0f) && (uv < 1.0f));
     }
+
     return Result;
 }
 
@@ -1959,6 +2098,66 @@ bool DoesIntersect(ray2 A, ray2 B)
     return Result;
 }
 
+bool CheckCollinearEdgesOverlaps(line2 A, line2 B)
+{
+    bool Result = false;
+
+    v2 a = A.P1;
+    v2 b = A.P2;
+    v2 c = B.P1;
+    v2 d = B.P2;
+
+    /* Check X. */
+    {
+        /* Ensure a < b and c < d */
+        {
+            if (b.X < a.X)
+            {
+                float Tmp = a.X;
+                a.X = b.X;
+                b.X = Tmp;
+            }
+
+            if (d.X < c.X)
+            {
+                float Tmp = c.X;
+                c.X = d.X;
+                d.X = Tmp;
+            }
+        }
+        if (b.X > c.X && a.X < d.X)
+        {
+            Result = true;
+        }
+    }
+
+    /* Check Y. */
+    {
+        /* Ensure a < b and c < d */
+        {
+            if (b.Y < a.Y)
+            {
+                float Tmp = a.Y;
+                a.Y = b.Y;
+                b.Y = Tmp;
+            }
+
+            if (d.Y < c.Y)
+            {
+                float Tmp = c.Y;
+                c.Y = d.Y;
+                d.Y = Tmp;
+            }
+        }
+        if (b.Y > c.Y && a.Y < d.Y)
+        {
+            Result = true;
+        }
+    }
+
+    return Result;
+}
+
 /* Note that if LineA and LineB share a vertex, this returns true. */
 bool GetIntersection(line2 LineA, line2 LineB, v2 *PointOfIntersection_Out, bool DoEndpointsCountAsIntersection = false, bool *Overlaps_Out = NULL)
 {
@@ -1981,63 +2180,12 @@ bool GetIntersection(line2 LineA, line2 LineB, v2 *PointOfIntersection_Out, bool
     if (a1 == 0.0f && a2 == 0.0f)
     {
         /* They are collinear. They only intersect if they also overlap. */
-
-        /* Check X. */
+        if (CheckCollinearEdgesOverlaps(LineA, LineB))
         {
-            /* Ensure a < b and c < d */
+            DoesIntersect = true;
+            if (Overlaps_Out)
             {
-                if (b.X < a.X)
-                {
-                    float Tmp = a.X;
-                    a.X = b.X;
-                    b.X = Tmp;
-                }
-
-                if (d.X < c.X)
-                {
-                    float Tmp = c.X;
-                    c.X = d.X;
-                    d.X = Tmp;
-                }
-            }
-            if (b.X > c.X && a.X < d.X)
-            {
-                Assert(PointOfIntersection_Out == NULL);
-                DoesIntersect = true;
                 *Overlaps_Out = true;
-                if (Overlaps_Out)
-                {
-                    *Overlaps_Out = true;
-                }
-            }
-        }
-
-        /* Check Y. */
-        {
-            /* Ensure a < b and c < d */
-            {
-                if (b.Y < a.Y)
-                {
-                    float Tmp = a.Y;
-                    a.Y = b.Y;
-                    b.Y = Tmp;
-                }
-
-                if (d.Y < c.Y)
-                {
-                    float Tmp = c.Y;
-                    c.Y = d.Y;
-                    d.Y = Tmp;
-                }
-            }
-            if (b.Y > c.Y && a.Y < d.Y)
-            {
-                Assert(PointOfIntersection_Out == NULL);
-                DoesIntersect = true;
-                if (Overlaps_Out)
-                {
-                    *Overlaps_Out = true;
-                }
             }
         }
     }

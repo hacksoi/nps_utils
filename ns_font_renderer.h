@@ -12,6 +12,7 @@
 #include "ns_ttf.h"
 #include "ns_texture.h"
 #include "ns_opengl.h"
+#include "ns_triangulation.h"
 
 #define NS_FONT_RENDERER_MAX_STRING_SIZE 256
 #define NS_FONT_RENDERER_FLOATS_PER_CHAR 24
@@ -33,10 +34,16 @@ struct font_renderer
 {
     common_renderer Common;
 
-    ns_bmf BmfFile;
-    GLuint BmfTextureId;
+    union
+    {
+        struct
+        {
+            ns_bmf BmfFile;
+            GLuint BmfTextureId;
+        };
 
-    ns_ttf TtfFile;
+        ns_ttf TtfFile;
+    };
 
     uint32_t ImageWidth;
     uint32_t ImageHeight;
@@ -81,39 +88,6 @@ struct glyph_outline_edges
     line2 *Edges;
     int NumEdges;
 };
-
-const char *NsFontRendererVertexShaderSource = R"STR(
-#version 330 core
-layout (location = 0) in vec2 Pos;
-layout (location = 1) in vec2 vsTexCoord;
-
-uniform vec2 WindowDimensions;
-
-out vec2 fsTexCoord;
-
-void main()
-{
-    vec2 ClipPos = ((2.0f*Pos)/WindowDimensions) - 1.0f;
-    gl_Position = vec4(ClipPos, 0.0, 1.0f);
-
-    fsTexCoord = vsTexCoord;
-}
-)STR";
-
-const char *NsFontRendererFragmentShaderSource = R"STR(
-#version 330 core
-in vec2 fsTexCoord;
-
-uniform sampler2D Texture;
-
-out vec4 OutputColor;
-
-void main()
-{
-    vec4 TexColor = texture(Texture, fsTexCoord);
-    OutputColor = vec4(1.0f, 1.0f, 1.0f, TexColor.r);
-}
-)STR";
 
 internal int
 CalcMaxNumBezierPoints(int NumGlyphPoints)
@@ -258,22 +232,10 @@ Free(shape_mesh *Mesh)
 /* APIs */
 
 internal font_renderer
-CreateFontRenderer(uint32_t WindowWidth, uint32_t WindowHeight)
-{
-    font_renderer Result;
-    Result.Common = CreateCommonRenderer(WindowWidth, WindowHeight, sizeof(float)*NS_FONT_RENDERER_MAX_VERTEX_DATA_SIZE, NsFontRendererVertexShaderSource, NsFontRendererFragmentShaderSource);
-    Result.Common.Vbo = CreateAndBindVertexBuffer();
-    Result.Common.Vao = CreateAndBindVertexArray();
-    SetVertexAttributeFloat(0, 2, 4, 0);
-    SetVertexAttributeFloat(1, 2, 4, 2);
-    glBindVertexArray(0);
-    return Result;
-}
-
-internal font_renderer
 CreateFontRenderer(const char *TtfFilename, uint32_t WindowWidth, uint32_t WindowHeight)
 {
-    font_renderer Result = CreateFontRenderer(WindowWidth, WindowHeight);
+    font_renderer Result;
+    Result.Common = CreateGenericTextureCommonRenderObjects(WindowWidth, WindowHeight, NS_FONT_RENDERER_MAX_VERTEX_DATA_SIZE);
     Result.TtfFile = LoadTtf(TtfFilename);
     Result.Type = FontRendererType_TTF;
     return Result;
@@ -282,7 +244,8 @@ CreateFontRenderer(const char *TtfFilename, uint32_t WindowWidth, uint32_t Windo
 internal font_renderer
 CreateFontRenderer(const char *BmfFilename, const char *TgaFilename, uint32_t WindowWidth, uint32_t WindowHeight)
 {
-    font_renderer Result = CreateFontRenderer(WindowWidth, WindowHeight);
+    font_renderer Result;
+    Result.Common = CreateGenericTextureCommonRenderObjects(WindowWidth, WindowHeight, NS_FONT_RENDERER_MAX_VERTEX_DATA_SIZE);
 
     ns_tga TgaFile = LoadTga(TgaFilename);
     Result.ImageWidth = TgaFile.Header->Width;
@@ -500,104 +463,249 @@ glyph_outline CreateGlyphOutline(font_renderer *FontRenderer, char Char, int Poi
     return Result;
 }
 
-internal void
-DrawString(font_renderer *FontRenderer, const char *String, float StringPosX, float StringPosY, float FontScale = 1.0f, shape_renderer *ShapeRenderer = 0)
+struct char_render_data
 {
-#if 0
-    Assert(StrLen((char *)String) <= NS_FONT_RENDERER_MAX_STRING_SIZE);
+    v2 XYOffset;
+    float XAdvance;
 
-    v2 StringPos = V2(500.0f, 250.0f);//V2(StringPosX, StringPosY);
-    switch (FontRenderer->Type)
+    quad2 TexCoordsQuad;
+    v2 DefaultSize;
+};
+
+char_render_data GetCharRenderData(font_renderer *FontRenderer, char Char)
+{
+    /* Only BMF types have textures. */
+    Assert(FontRenderer->Type == FontRendererType_BMF);
+
+    bmf_char *FirstChar = FontRenderer->BmfFile.GetChar(0);
+    Assert((uint32_t)Char >= FirstChar->id);
+    bmf_char *BmfChar = FontRenderer->BmfFile.GetChar(Char - FirstChar->id);
+
+    int FixedTexCoordCharY = BmfChar->y + BmfChar->height;
+    FixedTexCoordCharY = FontRenderer->ImageHeight - FixedTexCoordCharY;
+
+    float TexCoordCharX = (float)BmfChar->x/(float)FontRenderer->ImageWidth;
+    float TexCoordCharY = (float)FixedTexCoordCharY/(float)FontRenderer->ImageHeight;
+    float TexCoordCharWidth = (float)BmfChar->width/(float)FontRenderer->ImageWidth;
+    float TexCoordCharHeight = (float)BmfChar->height/(float)FontRenderer->ImageHeight;
+
+    quad2 TexCoordQuad = QuadFromPosSize(V2(TexCoordCharX, TexCoordCharY), V2(TexCoordCharWidth, TexCoordCharHeight));
+
+    /* OpenGL expects beginning of image data to be the top of the image. It isn't. Do this to fix it. */
+    TexCoordQuad.BottomLeft.Y *= -1.0f;
+    TexCoordQuad.BottomRight.Y *= -1.0f;
+    TexCoordQuad.TopRight.Y *= -1.0f;
+    TexCoordQuad.TopLeft.Y *= -1.0f;
+
+    v2 DefaultSize = V2(BmfChar->width, BmfChar->height);
+
+    char_render_data Result;
+    Result.TexCoordsQuad = TexCoordQuad;
+    Result.DefaultSize = DefaultSize;
+
+    /* This offset is interesting. It assumes that the top of the letter is touching the top-line (not the
+       base-line). For convenience sake, we assume the bottom of the letter is touching the top-line. */
+    Result.XYOffset = V2(BmfChar->xoffset, -(BmfChar->yoffset + BmfChar->height));
+
+    Result.XAdvance = BmfChar->xadvance;
+    return Result;
+}
+
+struct glyph_triangulation
+{
+    tri2 *Triangles;
+    int NumTriangles;
+
+    v2 *Points;
+    int NumPoints;
+
+    line2 *Edges;
+    int NumEdges;
+};
+void Free(glyph_triangulation *GlyphTriangulation)
+{
+    free(GlyphTriangulation->Triangles);
+    free(GlyphTriangulation->Points);
+    free(GlyphTriangulation->Edges);
+}
+glyph_triangulation CreateGlyphTriangulation(font_renderer *FontRenderer, char Char, int PointSize, v2 GlyphPos, int DebugNumConstraintEdgesUser = 0)
+{
+    glyph_triangulation Result;
+
+    glyph_outline GlyphOutline = CreateGlyphOutline(FontRenderer, Char, PointSize);
+    for (int PointsIdx = 0; PointsIdx < GlyphOutline.NumPoints; PointsIdx++)
     {
-        case FontRendererType_TTF:
+        GlyphOutline.Points[PointsIdx] += GlyphPos;
+    }
+    for (int EdgesIdx = 0; EdgesIdx < GlyphOutline.NumEdges; EdgesIdx++)
+    {
+        GlyphOutline.Edges[EdgesIdx] += GlyphPos;
+    }
+
+    triangulation_result TriangulationResult = CreateTriangulation(GlyphOutline.Points, GlyphOutline.NumPoints,
+                                                                   GlyphOutline.Edges, 
+                                                                   GlyphOutline.NumEdges);
+
+    /* And remove the triangles outside the outline. */
+    for (int TriangulationTriIdx = 0; TriangulationTriIdx < TriangulationResult.NumTriangulationTris;)
+    {
+        tri2 TriangulationTri = TriangulationResult.TriangulationTris[TriangulationTriIdx];
+        bool IsInside;
         {
-            Assert(ShapeRenderer);
-            while (*String)
+            v2 TriCenter = GetCenter(TriangulationTri);
+            int NumIntersections[2] = {};
+            /* It's possible for it to intersect a vertex. Since each vertex is shared by at least two edges, it will intersect
+               it twice, even though it should only be counted as once. Save these vertices so we can avoid. */
+#define MAX_VERTICES_INTERSECTED 10
+            v2 VerticesIntersected[MAX_VERTICES_INTERSECTED];
+            int NumVerticesIntersected = 0;
+            for (int DirectionIdx = 0; DirectionIdx < ArrayCount(NumIntersections); DirectionIdx++)
             {
-                char Char = *String++;
-
-				glyph_outline_points GlyphOutline = CreateGlyphOutlinePoints(FontRenderer, Char, 300);
-#if 1 /* New and improved approach: meshes!!! */
-                /* In the works... */
-                //shape_mesh GlyphMesh = CreateMesh(&FontRenderer->TtfFile, &GlyphOutline);
-#else /* Bitmap approach, which sucks!! */
-                ns_texture GlyphTexture = CreateGlyphTexture(&GlyphOutline);
-                ns_texture GlyphTexture;
-                GlyphTexture.Width = 64;
-                GlyphTexture.Height = 32;
-                GlyphTexture.Data = MemAlloc(GlyphTexture.Width*GlyphTexture.Height);
-
-                // debug
-                for (int Y = 0; Y < GlyphTexture.Height; Y++)
+                v2 Dir = DirectionIdx == 0 ? V2(1.0f, 0.0f) : V2(-1.0f, 0.0f);
+                ray2 TriCenterRay = RAY2(TriCenter, Dir);
+                for (int OutlineEdgesIdx = 0; OutlineEdgesIdx < GlyphOutline.NumEdges; OutlineEdgesIdx++)
                 {
-                    for (int X = 0; X < GlyphTexture.Width; X++)
+                    line2 OutlineEdge = GlyphOutline.Edges[OutlineEdgesIdx];
+                    if (Intersects(TriCenterRay, OutlineEdge))
                     {
-                        GlyphTexture.Data[Y*GlyphTexture.Width + X] = (Y % 2 == 0) ? 255 : 0;
+                        /* Did we intersect the vertex? */
+                        bool AlreadyIntersected = false;
+                        v2 IntersectedVert = {};
+                        {
+                            if (TriCenterRay.Pos.Y == OutlineEdge.P1.Y || TriCenterRay.Pos.Y == OutlineEdge.P2.Y)
+                            {
+                                /* Which one? */
+                                IntersectedVert = (TriCenterRay.Pos.Y == OutlineEdge.P1.Y) ? OutlineEdge.P1 : OutlineEdge.P2;
+
+                                /* Did we already intersect it? */
+                                if (CheckArrayContains(VerticesIntersected, NumVerticesIntersected, IntersectedVert))
+                                {
+                                    AlreadyIntersected = true;
+                                }
+                            }
+                        }
+                        if (!AlreadyIntersected)
+                        {
+                            NumIntersections[DirectionIdx]++;
+
+                            Assert(NumVerticesIntersected < ArrayCount(VerticesIntersected));
+                            VerticesIntersected[NumVerticesIntersected++] = IntersectedVert;
+                        }
                     }
                 }
-
-                GLuint TextureId;
-                glGenTextures(1, &TextureId);
-                glBindTexture(GL_TEXTURE_2D, TextureId);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, GlyphTexture.Width, GlyphTexture.Height, 0, GL_RED, GL_UNSIGNED_BYTE, GlyphTexture.Data);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-                glGenerateMipmap(GL_TEXTURE_2D);
-
-                rect2 TexCoordRect = RECT2(V2(0.0f, 0.0f), V2(1.0f, 1.0f));
-
-                rect2 PosRect = RectFromPosSize(StringPos, V2(GlyphTexture.Width, GlyphTexture.Height));
-                int NumVertexData = 0;
-                InsertTexture((float *)FontRenderer->Common.VertexData, &NumVertexData, PosRect, TexCoordRect);
-
-                BeginRender(&FontRenderer->Common, sizeof(float)*NumVertexData);
-                glBindTexture(GL_TEXTURE_2D, TextureId);
-                glDrawArrays(GL_TRIANGLES, 0, NumVertexData/4);
-                EndRender(&FontRenderer->Common);
-
-                glDeleteTextures(1, &TextureId);
-                Free(&GlyphTexture);
-#endif
-                Free(&GlyphOutline);
             }
-        } break;
+            IsInside = ((NumIntersections[0] % 2) == 1) && ((NumIntersections[1] % 2) == 1);
+        }
+        if (!IsInside)
+        {
+            /* Remove this fucking bitch ass nigga. */
+            Assert(TriangulationResult.NumTriangulationTris > 0);
+            TriangulationResult.TriangulationTris[TriangulationTriIdx] = TriangulationResult.TriangulationTris[--TriangulationResult.NumTriangulationTris];
+        }
+        else
+        {
+            TriangulationTriIdx++;
+        }
+    }
 
+    Result.Triangles = TriangulationResult.TriangulationTris;
+    Result.NumTriangles = TriangulationResult.NumTriangulationTris;
+    Result.Points = GlyphOutline.Points;
+    Result.NumPoints = GlyphOutline.NumPoints;
+    Result.Edges = GlyphOutline.Edges;
+    Result.NumEdges = GlyphOutline.NumEdges;
+    return Result;
+}
+
+float GetStringWidth(font_renderer *FontRenderer, char *String)
+{
+    Assert(FontRenderer->Type == FontRendererType_BMF);
+
+    float Result = 0.0f;
+    for (int StringIdx = 0; StringIdx < StrLen(String); StringIdx++)
+    {
+        char Char = String[StringIdx];
+        char_render_data CharRenderData = GetCharRenderData(FontRenderer, Char);
+        Result += CharRenderData.XAdvance;
+    }
+    return Result;
+}
+
+void DrawString(font_renderer *FontRenderer, char *String, v2 StringPos, float RotAngle = 0.0f, bool Centered = false, float StretchX = 1.0f)
+{
+    Assert(StrLen((char *)String) <= NS_FONT_RENDERER_MAX_STRING_SIZE);
+
+    switch (FontRenderer->Type)
+    {
         case FontRendererType_BMF:
         {
             int NumVertexData = 0;
-            while (*String)
+
+            /* What we do is treat it like a regular mesh. We create the mesh centered on the origin, then scale, then rotate, then position. */
+
+            /* Get total string width. */
+            float TotalStringWidth = GetStringWidth(FontRenderer, String);
+
+            /* Get the position of the string relative to the origin. */
+            float LineHeight = FontRenderer->BmfFile.CommonBlock->lineHeight;
+            const v2 OriginPos = V2(-(TotalStringWidth/2.0f), LineHeight/2.0f);
+            const v2 OriginPosZeroY = V2(-(TotalStringWidth/2.0f), 0.0f);
+            v2 CurPos = OriginPos;
+
+            /* Generate the mesh at the origin. */
+            quad2 PosSizeQuads[1024];
+            quad2 TexCoordsQuads[1024];
+            int NumQuads = 0;
+            for (int StringIdx = 0; StringIdx < StrLen(String); StringIdx++)
             {
-                uint32_t C = *String++;
+                char Char = String[StringIdx];
 
-                bmf_char *FirstChar = FontRenderer->BmfFile.GetChar(0);
-                Assert(C >= FirstChar->id);
-                bmf_char *BmfChar = FontRenderer->BmfFile.GetChar(C - FirstChar->id);
+                char_render_data CharRenderData = GetCharRenderData(FontRenderer, Char);
+                v2 Size = CharRenderData.DefaultSize;
+                v2 Pos = CurPos + CharRenderData.XYOffset;
+                quad2 PosSizeQuad = QuadFromPosSize(Pos, Size);
 
-                int FixedTexCoordCharY = BmfChar->y + BmfChar->height;
-                FixedTexCoordCharY = FontRenderer->ImageHeight - FixedTexCoordCharY;
+                PosSizeQuads[NumQuads] = PosSizeQuad;
+                TexCoordsQuads[NumQuads] = CharRenderData.TexCoordsQuad;
+                NumQuads++;
 
-                float TexCoordCharX = (float)BmfChar->x/(float)FontRenderer->ImageWidth;
-                float TexCoordCharY = (float)FixedTexCoordCharY/(float)FontRenderer->ImageHeight;
-                float TexCoordCharWidth = (float)BmfChar->width/(float)FontRenderer->ImageWidth;
-                float TexCoordCharHeight = (float)BmfChar->height/(float)FontRenderer->ImageHeight;
-
-                quad2 TexCoordQuad = QuadFromPosSize(V2(TexCoordCharX, TexCoordCharY), V2(TexCoordCharWidth, TexCoordCharHeight));
-
-                /* OpenGL expects beginning of image data to be the top of the image. It isn't. Do this to fix it. */
-                TexCoordQuad.BottomLeft.Y *= -1.0f;
-                TexCoordQuad.BottomRight.Y *= -1.0f;
-                TexCoordQuad.TopRight.Y *= -1.0f;
-                TexCoordQuad.TopLeft.Y *= -1.0f;
-
-                v2 PosSize = FontScale*V2(BmfChar->width, BmfChar->height);
-                quad2 PosQuad = QuadFromPosSize(V2(StringPosX, StringPosY), PosSize);
-                InsertTexture((float *)FontRenderer->Common.VertexData, &NumVertexData, PosQuad, TexCoordQuad);
-
-                StringPosX = PosQuad.BottomRight.X;
+                CurPos.X += CharRenderData.XAdvance;
             }
 
-            BeginRender(&FontRenderer->Common, sizeof(float)*NumVertexData);
+            /* Do scaling. */
+            for (int QuadIdx = 0; QuadIdx < NumQuads; QuadIdx++)
+            {
+                quad2 PosSizeQuad = PosSizeQuads[QuadIdx];
+                PosSizeQuads[QuadIdx] = MultiplyXBy(PosSizeQuad, StretchX);
+            }
+
+            /* Do rotation. */
+            for (int QuadIdx = 0; QuadIdx < NumQuads; QuadIdx++)
+            {
+                Rotate(&PosSizeQuads[QuadIdx], RotAngle);
+            }
+            v2 RotatedOriginPos = Rotate(OriginPos, RotAngle);
+            v2 RotatedOriginPosZeroY = Rotate(OriginPosZeroY, RotAngle);
+
+            /* Add user position. */
+            for (int QuadIdx = 0; QuadIdx < NumQuads; QuadIdx++)
+            {
+                if (!Centered)
+                {
+                    PosSizeQuads[QuadIdx] += StretchX*(-RotatedOriginPosZeroY);
+                }
+                PosSizeQuads[QuadIdx] += StringPos;
+            }
+
+            /* Add quads. */
+            for (int QuadIdx = 0; QuadIdx < NumQuads; QuadIdx++)
+            {
+                InsertTexture((float *)FontRenderer->Common.VertexData, &NumVertexData, PosSizeQuads[QuadIdx], TexCoordsQuads[QuadIdx]);
+            }
+
+            BeginRender(&FontRenderer->Common, NumVertexData);
             glBindTexture(GL_TEXTURE_2D, FontRenderer->BmfTextureId);
+            Assert(NumVertexData % 4 == 0);
             glDrawArrays(GL_TRIANGLES, 0, NumVertexData/4);
             EndRender(&FontRenderer->Common);
         } break;
@@ -607,7 +715,51 @@ DrawString(font_renderer *FontRenderer, const char *String, float StringPosX, fl
             CrashProgram();
         } break;
     }
-#endif
+}
+
+void DrawString(font_renderer *FontRenderer, char *String, v2 StringStartPos, v2 StringEndPos)
+{
+    switch (FontRenderer->Type)
+    {
+        case FontRendererType_BMF:
+        {
+            /* What we do is treat it like a regular mesh. We create the mesh centered on the origin, then scale, then rotate, then position. */
+
+            /* Get scale factor. */
+            float StringWidth = GetStringWidth(FontRenderer, String);
+            float DesiredStringWidth = GetDistance(StringEndPos, StringStartPos);
+            float StretchX = DesiredStringWidth/StringWidth;
+
+            /* Get rotation angle. */
+            v2 StartEndDiff = StringEndPos - StringStartPos;
+            v2 StartEndDir = Normalize(StartEndDiff);
+            float RotAngle = GetAngleBetween(V2(1.0f, 0.0f), StartEndDir, AngleDirection_CCW);
+
+            DrawString(FontRenderer, String, StringStartPos, RotAngle, false, StretchX);
+        } break;
+
+        default:
+        {
+            CrashProgram();
+        } break;
+    }
+}
+
+void DrawString(font_renderer *FontRenderer, const char *String, v2 StringPosCenter, float RotAngle)
+{
+    DrawString(FontRenderer, (char *)String, StringPosCenter, RotAngle);
+}
+
+void DrawString(font_renderer *FontRenderer, const char *String, v2 StringStartPos, v2 StringEndPos)
+{
+    DrawString(FontRenderer, (char *)String, StringStartPos, StringEndPos);
+}
+
+uint32_t GetFontTextureId(font_renderer *FontRenderer)
+{
+    Assert(FontRenderer->Type == FontRendererType_BMF);
+    uint32_t Result = FontRenderer->BmfTextureId;
+    return Result;
 }
 
 internal void
