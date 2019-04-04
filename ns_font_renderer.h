@@ -1,8 +1,3 @@
-/* For the TTF renderer, bitmaps just won't cut it. This is because we want to stretch the font out a lot, so if we
-   stretch is diagonally for example, the bitmap is gonna have a lot of empty space that we have iterate over, and
-   for each pixel transition we have to go through each edge; although, we can optimize that, but it'll still be
-   expensive. Therefore, we we're doing a proper mesh using delaunay triangulation. */
-
 #ifndef NS_FONT_RENDERER
 #define NS_FONT_RENDERER
 
@@ -13,10 +8,11 @@
 #include "ns_texture.h"
 #include "ns_opengl.h"
 #include "ns_triangulation.h"
+#include "ns_common_renderer.h"
 
-#define NS_FONT_RENDERER_MAX_STRING_SIZE 256
-#define NS_FONT_RENDERER_FLOATS_PER_CHAR 24
-#define NS_FONT_RENDERER_MAX_VERTEX_DATA_SIZE (NS_FONT_RENDERER_MAX_STRING_SIZE*NS_FONT_RENDERER_FLOATS_PER_CHAR)
+#define FONT_RENDERER_MAX_STRING_SIZE 2048
+#define FONT_RENDERER_FLOATS_PER_CHAR 24
+#define FONT_RENDERER_MAX_VERTEX_DATA_SIZE (FONT_RENDERER_MAX_STRING_SIZE*FONT_RENDERER_FLOATS_PER_CHAR)
 
 /* TODO: query OS for this. */
 #define SCREEN_DPI 72
@@ -151,6 +147,12 @@ GetEdge(glyph_outline_points_edge_iterator *Iterator)
     return Result;
 }
 
+float GetLineHeight(font_renderer *FontRenderer)
+{
+    float Result = FontRenderer->BmfFile.CommonBlock->lineHeight;
+    return Result;
+}
+
 #if 0 /* Doesn't work. */
 internal ns_texture
 CreateGlyphTexture(glyph_outline_points *Mesh)
@@ -235,7 +237,7 @@ internal font_renderer
 CreateFontRenderer(const char *TtfFilename, uint32_t WindowWidth, uint32_t WindowHeight)
 {
     font_renderer Result;
-    Result.Common = CreateGenericTextureCommonRenderObjects(WindowWidth, WindowHeight, NS_FONT_RENDERER_MAX_VERTEX_DATA_SIZE);
+    Result.Common = CreateGenericTextureCommonRenderObjects(WindowWidth, WindowHeight, sizeof(float)*FONT_RENDERER_MAX_VERTEX_DATA_SIZE);
     Result.TtfFile = LoadTtf(TtfFilename);
     Result.Type = FontRendererType_TTF;
     return Result;
@@ -245,7 +247,7 @@ internal font_renderer
 CreateFontRenderer(const char *BmfFilename, const char *TgaFilename, uint32_t WindowWidth, uint32_t WindowHeight)
 {
     font_renderer Result;
-    Result.Common = CreateGenericTextureCommonRenderObjects(WindowWidth, WindowHeight, NS_FONT_RENDERER_MAX_VERTEX_DATA_SIZE);
+    Result.Common = CreateGenericTextureCommonRenderObjects(WindowWidth, WindowHeight, sizeof(float)*FONT_RENDERER_MAX_VERTEX_DATA_SIZE);
 
     ns_tga TgaFile = LoadTga(TgaFilename);
     Result.ImageWidth = TgaFile.Header->Width;
@@ -477,9 +479,7 @@ char_render_data GetCharRenderData(font_renderer *FontRenderer, char Char)
     /* Only BMF types have textures. */
     Assert(FontRenderer->Type == FontRendererType_BMF);
 
-    bmf_char *FirstChar = FontRenderer->BmfFile.GetChar(0);
-    Assert((uint32_t)Char >= FirstChar->id);
-    bmf_char *BmfChar = FontRenderer->BmfFile.GetChar(Char - FirstChar->id);
+    bmf_char *BmfChar = GetBmfChar(&FontRenderer->BmfFile, Char);
 
     int FixedTexCoordCharY = BmfChar->y + BmfChar->height;
     FixedTexCoordCharY = FontRenderer->ImageHeight - FixedTexCoordCharY;
@@ -550,7 +550,7 @@ glyph_triangulation CreateGlyphTriangulation(font_renderer *FontRenderer, char C
     for (int TriangulationTriIdx = 0; TriangulationTriIdx < TriangulationResult.NumTriangulationTris;)
     {
         tri2 TriangulationTri = TriangulationResult.TriangulationTris[TriangulationTriIdx];
-        bool IsInside;
+        bool CheckInside;
         {
             v2 TriCenter = GetCenter(TriangulationTri);
             int NumIntersections[2] = {};
@@ -566,7 +566,7 @@ glyph_triangulation CreateGlyphTriangulation(font_renderer *FontRenderer, char C
                 for (int OutlineEdgesIdx = 0; OutlineEdgesIdx < GlyphOutline.NumEdges; OutlineEdgesIdx++)
                 {
                     line2 OutlineEdge = GlyphOutline.Edges[OutlineEdgesIdx];
-                    if (Intersects(TriCenterRay, OutlineEdge))
+                    if (CheckIntersects(TriCenterRay, OutlineEdge))
                     {
                         /* Did we intersect the vertex? */
                         bool AlreadyIntersected = false;
@@ -594,9 +594,9 @@ glyph_triangulation CreateGlyphTriangulation(font_renderer *FontRenderer, char C
                     }
                 }
             }
-            IsInside = ((NumIntersections[0] % 2) == 1) && ((NumIntersections[1] % 2) == 1);
+            CheckInside = ((NumIntersections[0] % 2) == 1) && ((NumIntersections[1] % 2) == 1);
         }
-        if (!IsInside)
+        if (!CheckInside)
         {
             /* Remove this fucking bitch ass nigga. */
             Assert(TriangulationResult.NumTriangulationTris > 0);
@@ -617,30 +617,44 @@ glyph_triangulation CreateGlyphTriangulation(font_renderer *FontRenderer, char C
     return Result;
 }
 
+float GetCharacterWidth(font_renderer *FontRenderer, char Char)
+{
+    Assert(FontRenderer->Type == FontRendererType_BMF);
+
+    bmf_char *BmfChar = GetBmfChar(&FontRenderer->BmfFile, Char);
+    float Result = BmfChar->xadvance;
+    return Result;
+}
+
 float GetStringWidth(font_renderer *FontRenderer, char *String)
 {
     Assert(FontRenderer->Type == FontRendererType_BMF);
 
     float Result = 0.0f;
-    for (int StringIdx = 0; StringIdx < StrLen(String); StringIdx++)
+    int StringLength = GetLength(String);
+    for (int StringIdx = 0; StringIdx < StringLength; StringIdx++)
     {
-        char Char = String[StringIdx];
-        char_render_data CharRenderData = GetCharRenderData(FontRenderer, Char);
-        Result += CharRenderData.XAdvance;
+        float CharWidth = GetCharacterWidth(FontRenderer, String[StringIdx]);
+        Result += CharWidth;
     }
     return Result;
 }
 
-void DrawString(font_renderer *FontRenderer, char *String, v2 StringPos, float RotAngle = 0.0f, bool Centered = false, float StretchX = 1.0f)
+float GetStringWidth(font_renderer *FontRenderer, const char *String)
 {
-    Assert(StrLen((char *)String) <= NS_FONT_RENDERER_MAX_STRING_SIZE);
+    float Result = GetStringWidth(FontRenderer, (char *)String);
+    return Result;
+}
+
+void AddString(font_renderer *FontRenderer, char *String, v2 StringPos, float RotAngle = 0.0f, bool Centered = false, float StretchX = 1.0f)
+{
+    int StringLength = GetLength(String);
+    Assert(StringLength <= FONT_RENDERER_MAX_STRING_SIZE);
 
     switch (FontRenderer->Type)
     {
         case FontRendererType_BMF:
         {
-            int NumVertexData = 0;
-
             /* What we do is treat it like a regular mesh. We create the mesh centered on the origin, then scale, then rotate, then position. */
 
             /* Get total string width. */
@@ -653,10 +667,10 @@ void DrawString(font_renderer *FontRenderer, char *String, v2 StringPos, float R
             v2 CurPos = OriginPos;
 
             /* Generate the mesh at the origin. */
-            quad2 PosSizeQuads[1024];
-            quad2 TexCoordsQuads[1024];
+            quad2 PosSizeQuads[FONT_RENDERER_MAX_STRING_SIZE];
+            quad2 TexCoordsQuads[FONT_RENDERER_MAX_STRING_SIZE];
             int NumQuads = 0;
-            for (int StringIdx = 0; StringIdx < StrLen(String); StringIdx++)
+            for (int StringIdx = 0; StringIdx < StringLength; StringIdx++)
             {
                 char Char = String[StringIdx];
 
@@ -700,14 +714,9 @@ void DrawString(font_renderer *FontRenderer, char *String, v2 StringPos, float R
             /* Add quads. */
             for (int QuadIdx = 0; QuadIdx < NumQuads; QuadIdx++)
             {
-                InsertTexture((float *)FontRenderer->Common.VertexData, &NumVertexData, PosSizeQuads[QuadIdx], TexCoordsQuads[QuadIdx]);
+                InsertTexture((float *)FontRenderer->Common.VertexData, FontRenderer->Common.MaxVertexDataBytes, &FontRenderer->Common.NumVertexData,
+                              PosSizeQuads[QuadIdx], TexCoordsQuads[QuadIdx]);
             }
-
-            BeginRender(&FontRenderer->Common, NumVertexData);
-            glBindTexture(GL_TEXTURE_2D, FontRenderer->BmfTextureId);
-            Assert(NumVertexData % 4 == 0);
-            glDrawArrays(GL_TRIANGLES, 0, NumVertexData/4);
-            EndRender(&FontRenderer->Common);
         } break;
 
         default:
@@ -717,7 +726,21 @@ void DrawString(font_renderer *FontRenderer, char *String, v2 StringPos, float R
     }
 }
 
-void DrawString(font_renderer *FontRenderer, char *String, v2 StringStartPos, v2 StringEndPos)
+void Render(font_renderer *FontRenderer)
+{
+    if (FontRenderer->Common.NumVertexData > 0)
+    {
+        BeginRender(&FontRenderer->Common, FontRenderer->Common.NumVertexData);
+        glBindTexture(GL_TEXTURE_2D, FontRenderer->BmfTextureId);
+        Assert(FontRenderer->Common.NumVertexData % 4 == 0);
+        glDrawArrays(GL_TRIANGLES, 0, FontRenderer->Common.NumVertexData/4);
+        EndRender(&FontRenderer->Common);
+
+        FontRenderer->Common.NumVertexData = 0;
+    }
+}
+
+void AddString(font_renderer *FontRenderer, char *String, v2 StringStartPos, v2 StringEndPos)
 {
     switch (FontRenderer->Type)
     {
@@ -735,7 +758,7 @@ void DrawString(font_renderer *FontRenderer, char *String, v2 StringStartPos, v2
             v2 StartEndDir = Normalize(StartEndDiff);
             float RotAngle = GetAngleBetween(V2(1.0f, 0.0f), StartEndDir, AngleDirection_CCW);
 
-            DrawString(FontRenderer, String, StringStartPos, RotAngle, false, StretchX);
+            AddString(FontRenderer, String, StringStartPos, RotAngle, false, StretchX);
         } break;
 
         default:
@@ -745,14 +768,19 @@ void DrawString(font_renderer *FontRenderer, char *String, v2 StringStartPos, v2
     }
 }
 
-void DrawString(font_renderer *FontRenderer, const char *String, v2 StringPosCenter, float RotAngle)
+void AddString(font_renderer *FontRenderer, const char *String, v2 StringPos)
 {
-    DrawString(FontRenderer, (char *)String, StringPosCenter, RotAngle);
+    AddString(FontRenderer, (char *)String, StringPos);
 }
 
-void DrawString(font_renderer *FontRenderer, const char *String, v2 StringStartPos, v2 StringEndPos)
+void AddString(font_renderer *FontRenderer, const char *String, v2 StringPosCenter, float RotAngle)
 {
-    DrawString(FontRenderer, (char *)String, StringStartPos, StringEndPos);
+    AddString(FontRenderer, (char *)String, StringPosCenter, RotAngle);
+}
+
+void AddString(font_renderer *FontRenderer, const char *String, v2 StringStartPos, v2 StringEndPos)
+{
+    AddString(FontRenderer, (char *)String, StringStartPos, StringEndPos);
 }
 
 uint32_t GetFontTextureId(font_renderer *FontRenderer)

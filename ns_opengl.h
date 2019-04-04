@@ -19,6 +19,7 @@ struct framebuffer
 
 global v4 GLUTILS_WHITE = {1.0f, 1.0f, 1.0f, 1.0f};
 global v4 GLUTILS_BLACK = {0.0f, 0.0f, 0.0f, 1.0f};
+global v4 GLUTILS_GRAY = ns_hex_string_to_vec("778899");
 global v4 GLUTILS_RED = {1.0f, 0.0f, 0.0f, 1.0f};
 global v4 GLUTILS_GREEN = {0.0f, 1.0f, 0.0f, 1.0f};
 global v4 GLUTILS_BLUE = {0.0f, 0.0f, 1.0f, 1.0f};
@@ -231,8 +232,10 @@ InsertQuad(quad2 Quad, float *VertexData, int *VertexDataCount)
 }
 
 internal void
-InsertTexture(float *VertexData, int *NumVertexData, quad2 Positions, quad2 TexCoord)
+InsertTexture(float *VertexData, int MaxVertexDataBytes, int *NumVertexData, quad2 Positions, quad2 TexCoord)
 {
+    Assert(*NumVertexData + 24 <= MaxVertexDataBytes);
+
     {
         VertexData[(*NumVertexData)++] = Positions.BottomLeft.X;
         VertexData[(*NumVertexData)++] = Positions.BottomLeft.Y;
@@ -269,11 +272,11 @@ InsertTexture(float *VertexData, int *NumVertexData, quad2 Positions, quad2 TexC
 }
 
 internal void
-InsertTexture(float *VertexData, int *NumVertexData, rect2 PosRect, rect2 TexCoordRect)
+InsertTexture(float *VertexData, int MaxVertexDataBytes, int *NumVertexData, rect2 PosRect, rect2 TexCoordRect)
 {
     quad2 PosQuad = QUAD2(PosRect);
     quad2 TexCoordQuad = QUAD2(TexCoordRect);
-    InsertTexture(VertexData, NumVertexData, PosQuad, TexCoordQuad);
+    InsertTexture(VertexData, MaxVertexDataBytes, NumVertexData, PosQuad, TexCoordQuad);
 }
 
 internal void
@@ -293,6 +296,33 @@ EnableSmoothLines()
 {
     glEnable(GL_LINE_SMOOTH);
     glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+}
+
+void SetUniform(int ShaderProgram, const char *UniformName, float X, float Y)
+{
+    int UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+    Assert(UniformLocation != -1);
+    glUniform2f(UniformLocation, X, Y);
+}
+
+void SetUniform(int ShaderProgram, const char *UniformName, float X)
+{
+    int UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+    Assert(UniformLocation != -1);
+    glUniform1f(UniformLocation, X);
+}
+
+void SetUniform(int ShaderProgram, const char *UniformName, int X, bool OkayIfDoesntExist = false)
+{
+    int UniformLocation = glGetUniformLocation(ShaderProgram, UniformName);
+    if (UniformLocation != -1)
+    {
+        glUniform1i(UniformLocation, X);
+    }
+    else
+    {
+        Assert(OkayIfDoesntExist);
+    }
 }
 
 #endif

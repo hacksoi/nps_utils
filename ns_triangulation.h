@@ -854,7 +854,7 @@ DISCONTINUITYFORLOOPEND: int DiscontinuityForLoopEnd = 0;
                 line2 TriEdge = TriEdges[TriEdgesIdx];
                 if (!HasSameVertex(TriEdge, ConstraintEdge))
                 {
-                    if (Intersects(TriEdge, ConstraintEdge))
+                    if (CheckIntersects(TriEdge, ConstraintEdge))
                     {
                         DoesIntersect = true;
                         break;
@@ -978,7 +978,7 @@ DISCONTINUITYFORLOOPEND: int DiscontinuityForLoopEnd = 0;
                                     /* We handle this case in the next for-loop. */
                                 }
                                 /* Do they intersect? */
-                                else if (Intersects(NewTriEdge, TriangulationTriEdge, &Overlaps))
+                                else if (CheckIntersects(NewTriEdge, TriangulationTriEdge, &Overlaps))
                                 {
                                     /* It's possible that the triangle this edge belongs to is completely inside the constraint
                                        polygon half (pic1). If that's the case, then just remove that triangle - it's been

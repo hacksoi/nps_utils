@@ -101,10 +101,18 @@ GetNextBmfBlock(bmf_block_header *Header)
     return Result;
 }
 
-internal ns_bmf
-LoadBmf(const char *Filename)
+bmf_char *GetBmfChar(ns_bmf *BmfFile, char Char)
 {
-    ns_file File = LoadFile(Filename);
+    bmf_char *FirstChar = BmfFile->GetChar(0);
+    Assert((uint32_t)Char >= FirstChar->id);
+    bmf_char *Result = BmfFile->GetChar(Char - FirstChar->id);
+    return Result;
+}
+
+internal ns_bmf
+LoadBmf(const char *Name)
+{
+    ns_file File = LoadFile(Name);
     Assert(!MemCmp((char *)File.Contents, (char *)"BMF", 3));
     Assert(File.Contents[3] == 3);
 

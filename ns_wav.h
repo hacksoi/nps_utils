@@ -76,12 +76,12 @@ GetNextChunk(wav_chunk_header *Header)
 }
 
 internal ns_wav
-LoadWav(const char *Filename)
+LoadWav(const char *Name)
 {
     riff_chunk *RiffChunk;
     wav_fmt_chunk *WavFmtChunk;
     wav_data_chunk *WavDataChunk;
-    ns_file File = LoadFile(Filename);
+    ns_file File = LoadFile(Name);
     uint8_t *FileContents = File.Contents;
     {
         /* We don't reverse endianness cause it's easier to copy to XAudio2. */

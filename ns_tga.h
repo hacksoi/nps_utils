@@ -27,9 +27,9 @@ struct ns_tga
 };
 
 ns_tga
-LoadTga(const char *Filename)
+LoadTga(const char *Name)
 {
-    ns_file File = LoadFile(Filename);
+    ns_file File = LoadFile(Name);
     ns_tga Result;
     Result.File = File;
     Result.Header = (tga_header *)File.Contents;

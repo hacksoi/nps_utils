@@ -1,8 +1,7 @@
 /* This file contains code for things that should probably be pulled out into their own file, but I don't really have a reason
    to do right now. */
 
-#if 0 /* Chaikin and that cool snake/sperm thing. */
-
+#if 0 /* Chaikin and that cool snake thing. */
 v2 RawPoints[2000];
 int NumRawPoints;
 float TotalLineLength;

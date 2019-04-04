@@ -5,7 +5,7 @@
 #include "ns_opengl_functions.h"
 #include "ns_common.h"
 
-#define SHAPE_RENDERER_MAX_VERTICES 4096
+#define SHAPE_RENDERER_MAX_VERTICES 4*1024*1024
 #define SHAPE_RENDERER_FLOATS_PER_VERTEX 6
 #define SHAPE_RENDERER_BYTES_PER_VERTEX (sizeof(float)*SHAPE_RENDERER_FLOATS_PER_VERTEX)
 #define SHAPE_RENDERER_CAPACITY_BYTES (SHAPE_RENDERER_MAX_VERTICES*SHAPE_RENDERER_BYTES_PER_VERTEX)
@@ -47,7 +47,7 @@ Reset(shape_renderer *ShapeRenderer)
 }
 
 internal shape_renderer
-CreateShapeRenderer(uint32_t WindowWidth, uint32_t WindowHeight)
+CreateShapeRenderer(int WindowWidth, int WindowHeight)
 {
     shape_renderer Result;
 
@@ -56,13 +56,18 @@ CreateShapeRenderer(uint32_t WindowWidth, uint32_t WindowHeight)
         layout(location = 0) in vec2 Pos;
         layout(location = 1) in vec4 vsColor;
 
+        uniform float Zoom;
         uniform vec2 WindowDimensions;
+        uniform vec2 CameraPos;
 
         out vec4 fsColor;
 
         void main()
         {
-            vec2 ClipPos = ((2.0f * Pos) / WindowDimensions) - 1.0f;
+            vec2 ViewSpacePos = Pos - CameraPos;
+            ViewSpacePos *= Zoom;
+            ViewSpacePos += 0.5f*WindowDimensions;
+            vec2 ClipPos = ((2.0f * ViewSpacePos) / WindowDimensions) - 1.0f;
             gl_Position = vec4(ClipPos, 0.0, 1.0f);
 
             fsColor = vsColor;
@@ -72,6 +77,8 @@ CreateShapeRenderer(uint32_t WindowWidth, uint32_t WindowHeight)
     const char *FragmentShaderSource = R"STR(
         #version 330 core
         in vec4 fsColor;
+
+        uniform int fsDebugValue;
 
         out vec4 OutputColor;
 
@@ -110,13 +117,20 @@ Flush(shape_renderer *ShapeRenderer)
     int ActualBytesUsed = GetBytesUsed(ShapeRenderer);
     Assert(ActualBytesUsed == ExpectedBytesUsed);
 
+#if 0
+    /* For some reason, these glGet calls can take a lot of time https://gamedev.stackexchange.com/questions/34944/glgetfloatv-should-it-be-avoided-can-it-be-replaced. */
     /* 0 = Front, 1 = Back. */
     GLint OriginalPolygonMode[2];
-    Assert(OriginalPolygonMode[0] == OriginalPolygonMode[1]);
     glGetIntegerv(GL_POLYGON_MODE, OriginalPolygonMode);
+    Assert(OriginalPolygonMode[0] == OriginalPolygonMode[1]);
+#endif
     if (ShapeRenderer->IsWireframe)
     {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
+    else
+    {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
     BeginRender(&ShapeRenderer->Common, GetBytesUsed(ShapeRenderer));
 
@@ -147,13 +161,15 @@ Flush(shape_renderer *ShapeRenderer)
 
     Reset(ShapeRenderer);
     EndRender(&ShapeRenderer->Common);
-    glPolygonMode(GL_FRONT_AND_BACK, OriginalPolygonMode[0]);
 }
 
 internal void
 Render(shape_renderer *ShapeRenderer)
 {
     Flush(ShapeRenderer);
+
+    /* We're at the end of the frame. Reset. */
+    ShapeRenderer->CurrentType = ShapeType_None;
 }
 
 internal bool
@@ -177,7 +193,10 @@ CheckFlush(shape_renderer *ShapeRenderer, shape_type ShapeType, int ShapeSizeByt
     }
     else
     {
-        Flush(ShapeRenderer);
+        if (ShapeRenderer->CurrentType != ShapeType_None)
+        {
+            Flush(ShapeRenderer);
+        }
         ShapeRenderer->CurrentType = ShapeType;
     }
 }
@@ -282,6 +301,36 @@ internal void
 Free(shape_renderer *ShapeRenderer)
 {
     Free(&ShapeRenderer->Common);
+}
+
+void SetCameraPos(shape_renderer *ShapeRenderer, v2 NewCameraPos)
+{
+    ShapeRenderer->Common.CameraPos = NewCameraPos;
+}
+
+void SetZoom(shape_renderer *ShapeRenderer, float NewZoom)
+{
+    ShapeRenderer->Common.Zoom = NewZoom;
+}
+
+void SetWindowSize(shape_renderer *ShapeRenderer, int WindowWidth, int WindowHeight)
+{
+    ShapeRenderer->Common.WindowWidth = WindowWidth;
+    ShapeRenderer->Common.WindowHeight = WindowHeight;
+
+    /* Let's make the bad decision of being clever and changing the camera pos too... */
+    v2 NewCameraPos = V2((float)WindowWidth/2.0f, (float)WindowHeight/2.0f);
+    SetCameraPos(ShapeRenderer, NewCameraPos);
+}
+
+v2 ConvertScreenToGame(shape_renderer *ShapeRenderer, v2 ScreenPoint)
+{
+    v2 ScreenCenter = V2((float)ShapeRenderer->Common.WindowWidth/2.0f, (float)ShapeRenderer->Common.WindowHeight/2.0f);
+    ScreenPoint -= ScreenCenter;
+    float InverseZoom = 1.0f/ShapeRenderer->Common.Zoom;
+    ScreenPoint *= InverseZoom;
+    ScreenPoint += ShapeRenderer->Common.CameraPos;
+    return ScreenPoint;
 }
 
 #endif

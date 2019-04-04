@@ -6,6 +6,8 @@
 
 #include "ns_common.h"
 
+#define NS_OGL_ASSIGN_FUNC(FuncType, FuncName) (FuncName = (FuncType)GetGLFunctionAddress(#FuncName)) == (void *)0
+
 PFNGLATTACHSHADERPROC glAttachShader;
 PFNGLBINDBUFFERPROC glBindBuffer;
 PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
@@ -69,6 +71,11 @@ PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
 PFNGLBUFFERSUBDATAPROC glBufferSubData;
 PFNGLGETERRORPROC glGetError;
 PFNGLDELETETEXTURESPROC glDeleteTextures;
+PFNGLGETFLOATVPROC glGetFloatv;
+PFNGLGENRENDERBUFFERSPROC glGenRenderbuffers;
+PFNGLBINDRENDERBUFFERPROC glBindRenderbuffer;
+PFNGLRENDERBUFFERSTORAGEPROC glRenderbufferStorage;
+PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer;
 
 internal void *
 GetGLFunctionAddress(const char *FunctionName)
@@ -88,6 +95,7 @@ GetGLFunctionAddress(const char *FunctionName)
             Log("could not load opengl function: %s\n", FunctionName);
         }
     }
+    Assert(FunctionAddress != NULL);
     return FunctionAddress;
 }
 
@@ -158,7 +166,12 @@ LoadOpenGLFunctions()
        (glCheckFramebufferStatus = (PFNGLCHECKFRAMEBUFFERSTATUSPROC)GetGLFunctionAddress("glCheckFramebufferStatus")) == (void *)0 ||
        (glBufferSubData = (PFNGLBUFFERSUBDATAPROC)GetGLFunctionAddress("glBufferSubData")) == (void *)0 ||
        (glGetError = (PFNGLGETERRORPROC)GetGLFunctionAddress("glGetError")) == (void *)0 ||
-       (glDeleteTextures = (PFNGLDELETETEXTURESPROC)GetGLFunctionAddress("glDeleteTextures")) == (void *)0
+       (glDeleteTextures = (PFNGLDELETETEXTURESPROC)GetGLFunctionAddress("glDeleteTextures")) == (void *)0 ||
+       (glGenRenderbuffers = (PFNGLGENRENDERBUFFERSPROC)GetGLFunctionAddress("glGenRenderbuffers")) == (void *)0 ||
+       (glBindRenderbuffer = (PFNGLBINDRENDERBUFFERPROC)GetGLFunctionAddress("glBindRenderbuffer")) == (void *)0 ||
+       (glRenderbufferStorage = (PFNGLRENDERBUFFERSTORAGEPROC)GetGLFunctionAddress("glRenderbufferStorage")) == (void *)0 ||
+       (glFramebufferRenderbuffer = (PFNGLFRAMEBUFFERRENDERBUFFERPROC)GetGLFunctionAddress("glFramebufferRenderbuffer")) == (void *)0 ||
+       (glGetFloatv = (PFNGLGETFLOATVPROC)GetGLFunctionAddress("glGetFloatv")) == (void *)0
        )
     {
         return false;

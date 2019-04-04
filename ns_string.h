@@ -58,13 +58,13 @@ char ConvertIntToHexChar(uint8_t Int)
 
 /* Strings */
 
-int StrLen(char *String)
+int GetLength(char *String)
 {
     int Result = (int)strlen(String);
     return Result;
 }
 
-int StrLen(const char *String)
+int GetLength(const char *String)
 {
     int Result = (int)strlen((char *)String);
     return Result;
@@ -171,10 +171,10 @@ int IntToString(char *Dest, int Value)
     return Result;
 }
 
-int StringToInt(char *String, int StrLen)
+int StringToInt(char *String, int GetLength)
 {
     int Result = 0;
-    for (int I = 0; I < StrLen; I++)
+    for (int I = 0; I < GetLength; I++)
     {
         char Digit = String[I] - '0';
         Result *= 10;
@@ -185,13 +185,12 @@ int StringToInt(char *String, int StrLen)
 
 int StringToInt(char *String)
 {
-    int StrLen = strlen(String);
-    int Result = StringToInt(String, StrLen);
+    int GetLength = strlen(String);
+    int Result = StringToInt(String, GetLength);
     return Result;
 }
 
-inline uint32_t
-ConvertHexStringToInt(char *HexString, int HexStringLength)
+uint32_t ConvertHexStringToInt(char *HexString, int HexStringLength)
 {
     if (HexString[0] == '0' && !IsNumber(HexString[1]))
     {
@@ -207,6 +206,101 @@ ConvertHexStringToInt(char *HexString, int HexStringLength)
         Result *= 16;
         Result += ConvertHexCharToInt(*HexString);
         HexString++;
+    }
+    return Result;
+}
+
+void ConvertMultipleSpacesToSingleSpace(char *String, int *StringLength_InOut)
+{
+    int StringLength = *StringLength_InOut;
+
+    for (int I = 0; I < StringLength - 1; I++)
+    {
+        char CurChar = String[I];
+        char NextChar = String[I + 1];
+
+        /* Are we at a stretch of spaces? */
+        if (CurChar == ' ' && NextChar == ' ')
+        {
+            /* How many spaces? */
+            int NumSpaces = 0;
+            for (int J = I;; J++)
+            {
+                char Char = String[J];
+                if (Char == ' ')
+                {
+                    NumSpaces++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            /* Remove the extra spaces. */
+            int NumSpacesToRemove = NumSpaces - 1;
+            RemoveConsecutiveElements(String, StringLength, I + 1, NumSpacesToRemove);
+
+            StringLength -= NumSpacesToRemove;
+        }
+    }
+
+    *StringLength_InOut = StringLength;
+}
+
+void TrimWhitespace(char *String, int *StringLength_InOut)
+{
+    int StringLength = *StringLength_InOut;
+
+    /* Count whitespace in front. */
+    int NumWhitespace = 0;
+    for (int I = 0; I < StringLength; I++)
+    {
+        if (isspace(String[I]))
+        {
+            NumWhitespace++;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    /* Remove them. */
+    RemoveConsecutiveElements(String, StringLength, 0, NumWhitespace);
+
+    /* Count whitespace in back. */
+    NumWhitespace = 0;
+    int FirstNonWhitespaceBackIdx;
+    for (FirstNonWhitespaceBackIdx = StringLength - 1; FirstNonWhitespaceBackIdx > 0; FirstNonWhitespaceBackIdx--)
+    {
+        if (isspace(String[FirstNonWhitespaceBackIdx]))
+        {
+            NumWhitespace++;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    /* Remove them. */
+    RemoveConsecutiveElements(String, StringLength, FirstNonWhitespaceBackIdx + 1, NumWhitespace);
+
+    *StringLength_InOut = StringLength;
+}
+
+char *GetBasename(char *FullFilePath)
+{
+    int Length = GetLength(FullFilePath);
+    char *Result = FullFilePath;
+    for (int I = Length - 1; I > 0; I--)
+    {
+        if (FullFilePath[I] == '/' || FullFilePath[I] == '\\')
+        {
+            Result = &FullFilePath[I  + 1];
+            break;
+        }
     }
     return Result;
 }

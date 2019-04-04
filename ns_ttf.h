@@ -746,11 +746,11 @@ GetNumContoursInGlyph(ns_ttf *TtfFile, char Char)
 }
 
 internal ns_ttf
-LoadTtf(const char *Filename)
+LoadTtf(const char *Name)
 {
     ns_ttf Result;
 
-    Result.File = LoadFile(Filename);
+    Result.File = LoadFile(Name);
 
     /* offset subtable */
     {

@@ -50,9 +50,15 @@
 #define Megabytes(NumberOfMbs) (NumberOfMbs * 1024 * 1024)
 #define Gigabytes(NumberOfGbs) (NumberOfGbs * 1024 * 1024 * 1024)
 
-//#define Assert(Expression) assert(Expression);
-#define Assert(Expression) if (!(Expression)) (*((int *)0) = 0)
-#define CrashProgram() Assert(false)
+void ErrorHandler()
+{
+    /* Just place a breakpoint here. */
+    int debug = 0;
+}
+
+#define Assert(Expression) if (!(Expression)) ErrorHandler();
+#define CrashProgram() *((int *)0) = 0;
+#define StallProgram() while (1);
 
 #define GetNumBits(X) (8*sizeof(X))
 
@@ -114,9 +120,12 @@ internal void Printf(uint32_t Value);
 
 #define ArrayCount(Array) (sizeof(Array)/sizeof(Array[0]))
 #define ArrayEnd(Array) (&Array[ArrayCount(Array)])
+#define ArrayAdd(Array, ArraySize, NewValue) if (ArraySize < ArrayCount(Array)) { Array[ArraySize++] = NewValue; } else { Assert(false); }
+#define ArrayRemove(Array, ArraySize, IndexToRemove) if (ArraySize > 0) { Array[IndexToRemove] = Array[--ArraySize]; } else { Assert(false); } 
+#define ArrayPtrAdd(Array, ArrayMaxSize, ArraySize, NewValue) if ((ArraySize) < ArrayMaxSize) { Array[(ArraySize)++] = NewValue; } else { Assert(false); }
 
 template <typename element_type>
-bool CheckArrayContains(element_type *Array, int ArrayLength, element_type Value)
+bool CheckArrayContains(element_type *Array, int ArrayLength, element_type Value, int *IndexPtr = NULL)
 {
     bool Result = false;
     for (int I = 0; I < ArrayLength; I++)
@@ -124,6 +133,25 @@ bool CheckArrayContains(element_type *Array, int ArrayLength, element_type Value
         if (Array[I] == Value)
         {
             Result = true;
+            if (IndexPtr)
+            {
+                *IndexPtr = I;
+            }
+            break;
+        }
+    }
+    return Result;
+}
+
+template <typename element_type>
+int GetArrayIndex(element_type *Array, int ArrayLength, element_type Value)
+{
+    int Result = -1;
+    for (int I = 0; I < ArrayLength; I++)
+    {
+        if (Array[I] == Value)
+        {
+            Result = I;
             break;
         }
     }
@@ -137,6 +165,19 @@ void RemoveArrayElement(element_type *Array, int ArrayLength, int RemoveIdx)
     {
         Array[I] = Array[I + 1];
     }
+}
+
+template <typename element_type>
+void InsertArrayElement(element_type *Array, int ArrayLength, int InsertIdx, element_type NewElement)
+{
+    /* Shift to make room. */
+    for (int I = ArrayLength; I > InsertIdx; I--)
+    {
+        Array[I] = Array[I - 1];
+    }
+
+    /* Add new element. */
+    Array[InsertIdx] = NewElement;
 }
 
 template <typename element_type>
@@ -192,6 +233,23 @@ int FindSmallest(element_type *Array, int ArrayLength, lambda CheckIfLarger)
         }
     }
     int Result = SmallestIdx;
+    return Result;
+}
+
+template <typename element_type>
+void RemoveConsecutiveElements(element_type *Array, int ArrayLength, int RemoveIdx, int NumElementsToRemove)
+{
+    for (int J = RemoveIdx; J < ArrayLength - NumElementsToRemove; J++)
+    {
+        Array[J] = Array[J + NumElementsToRemove];
+    }
+}
+
+int GetRandomNumber(int Min, int MaxExclusive)
+{
+    int Range = MaxExclusive - Min;
+    int RandomNumber = rand() % Range;
+    int Result = Min + RandomNumber;
     return Result;
 }
 

@@ -1,8 +1,12 @@
 #ifndef NS_GAME_MATH_H
 #define NS_GAME_MATH_H
 
+#include <stdlib.h>
 #include "ns_common.h"
 #include "ns_math.h"
+
+#define V2_ZERO V2(0.0f, 0.0f)
+#define V2I_ZERO V2I(0, 0)
 
 union v2
 {
@@ -17,6 +21,19 @@ union v2
     void operator+=(v2 A);
     void operator-=(v2 A);
     void operator*=(float A);
+    void operator/=(v2);
+};
+
+struct v2i
+{
+    int X, Y;
+
+    void operator+=(v2i);
+};
+
+struct v2d
+{
+    double X, Y;
 };
 
 union v3
@@ -122,7 +139,7 @@ struct rect2
 {
     v2 Min, Max;
 
-    void operator-=(v2);
+    void operator/=(v2);
 };
 
 union quad2
@@ -152,6 +169,15 @@ global uint32_t GlobalRectIndices[] = {
 struct pentagon
 {
     v2 P1, P2, P3, P4, P5;
+};
+
+enum direction
+{
+    Direction_None = 0, 
+    Direction_Up, 
+    Direction_Down, 
+    Direction_Left, 
+    Direction_Right
 };
 
 /* A quad in 3D */
@@ -192,10 +218,28 @@ Print(v2 V)
     Printf("%f, %f\n", V.X, V.Y);
 }
 
+void Floor(v2 *A)
+{
+    A->X = (float)Floor(A->X);
+    A->Y = (float)Floor(A->Y);
+}
+
 inline v2
 V2(float X, float Y)
 {
     v2 Result = {X, Y};
+    return Result;
+}
+
+v2d V2D(v2 V)
+{
+    v2d Result = {V.X, V.Y};
+    return Result;
+}
+
+v2i V2I(int X, int Y)
+{
+    v2i Result = {X, Y};
     return Result;
 }
 
@@ -218,6 +262,24 @@ V4(float X, float Y, float Z, float W)
 {
     v4 Result = {X, Y, Z, W};
     return Result;
+}
+
+v2i operator-(v2i A, v2i B)
+{
+    v2i Result = V2I(A.X - B.X, A.Y - B.Y);
+    return Result;
+}
+
+void v2i::operator+=(v2i A)
+{
+    this->X += A.X;
+    this->Y += A.Y;
+}
+
+void v2::operator/=(v2 Divisor)
+{
+    this->X /= Divisor.X;
+    this->Y /= Divisor.Y;
 }
 
 inline float &
@@ -324,6 +386,13 @@ operator*(float S, v2 V)
     return Result;
 }
 
+inline v2
+operator*(float S, v2i V)
+{
+    v2 Result = {S*V.X, S*V.Y};
+    return Result;
+}
+
 inline v3
 operator*(float S, v3 V)
 {
@@ -346,10 +415,32 @@ operator==(v2 A, v2 B)
     return Result;
 }
 
+bool operator==(v2i A, v2i B)
+{
+    bool Result = (A.X == B.X && 
+                   A.Y == B.Y);
+    return Result;
+}
+
+bool operator!=(v2i A, v2i B)
+{
+    bool Result = !(A == B);
+    return Result;
+}
+
 inline bool
 operator!=(v2 A, v2 B)
 {
     bool Result = !(A == B);
+    return Result;
+}
+
+v2 GetRandomV2(int MinX, int MaxX, 
+               int MinY, int MaxY)
+{
+    int RandomX = GetRandomNumber(MinX, MaxX);
+    int RandomY = GetRandomNumber(MinY, MaxY);
+    v2 Result = V2(RandomX, RandomY);
     return Result;
 }
 
@@ -364,6 +455,12 @@ inline bool
 IsZero(v2 A)
 {
     bool Result = (A.X == 0.0f && A.Y == 0.0f);
+    return Result;
+}
+
+bool IsWithinZero(v2 A)
+{
+    bool Result = IsWithinTolerance(A.X, 0.0f) && IsWithinTolerance(A.Y, 0.0f);
     return Result;
 }
 
@@ -433,6 +530,13 @@ inline float
 GetDistance(v2 A, v2 B)
 {
     float Result = GetLength(B - A);
+    return Result;
+}
+
+inline float
+GetDistanceSq(v2 A, v2 B)
+{
+    float Result = GetLengthSq(B - A);
     return Result;
 }
 
@@ -1168,6 +1272,12 @@ GetDirection(line2 Line)
     return Direction;
 }
 
+v2 GetDelta(line2 Line)
+{
+    v2 Result = Line.P2 - Line.P1;
+    return Result;
+}
+
 float GetLengthSq(line2 Line)
 {
     v2 Difference = Line.P2 - Line.P1;
@@ -1542,47 +1652,21 @@ RECT2(v2 Min, v2 Max)
     return Result;
 }
 
-/* Don't delete this. Useful for scaling with respect to the origin. */
-rect2
-operator*(float A, rect2 B)
+void rect2::operator/=(v2 Divisor)
 {
-    rect2 Result;
-    Result.Min = A*B.Min;
-    Result.Max = A*B.Max;
-    return Result;
+    this->Min /= Divisor;
+    this->Max /= Divisor;
 }
 
-void rect2::operator-=(v2 A)
+rect2 CreateRectFromArbitraryPoints(v2 StartPos, v2 EndPos)
 {
-    this->Max -= A;
-    this->Min -= A;
-}
+    float MinX = Min(StartPos.X, EndPos.X);
+    float MinY = Min(StartPos.Y, EndPos.Y);
 
-rect2
-RectFromPosSize(v2 Position, v2 Size)
-{
-    rect2 Result = {
-        Position,
-        Position + Size,
-    };
-    return Result;
-}
+    float MaxX = Max(StartPos.X, EndPos.X);
+    float MaxY = Max(StartPos.Y, EndPos.Y);
 
-bool
-IsValid(rect2 R)
-{
-    bool Result = R.Min != R.Max;
-    return Result;
-}
-
-quad2
-QuadFromPosSize(v2 Position, v2 Size)
-{
-    v2 BottomLeft = { Position.X, Position.Y };
-    v2 BottomRight = BottomLeft + V2(Size.X, 0.0f);
-    v2 TopLeft = BottomLeft + V2(0.0f, Size.Y);
-    v2 TopRight = BottomLeft + Size;
-    quad2 Result = { BottomLeft, BottomRight, TopRight, TopLeft };
+    rect2 Result = RECT2(V2(MinX, MinY), V2(MaxX, MaxY));
     return Result;
 }
 
@@ -1663,8 +1747,7 @@ GetBottomRight(rect2 Rect)
     return Result;
 }
 
-void
-GetCorners(rect2 Rect, v2 *Corners)
+void GetCorners(rect2 Rect, v2 *Corners)
 {
     Corners[0] = GetBottomLeft(Rect);
     Corners[1] = GetBottomRight(Rect);
@@ -1672,10 +1755,153 @@ GetCorners(rect2 Rect, v2 *Corners)
     Corners[3] = GetTopLeft(Rect);
 }
 
+/* Don't delete this. Useful for scaling with respect to the origin. */
+rect2
+operator*(float A, rect2 B)
+{
+    rect2 Result;
+    Result.Min = A*B.Min;
+    Result.Max = A*B.Max;
+    return Result;
+}
+
+rect2 operator-(rect2 A, v2 B)
+{
+    A.Max -= B;
+    A.Min -= B;
+    return A;
+}
+
+rect2 operator+(rect2 A, v2 B)
+{
+    A.Max += B;
+    A.Min += B;
+    return A;
+}
+
+/* We need to pass the size to combat floating-point error. */
+void Add(rect2 *Rect, v2 RectSize, v2 V)
+{
+    Rect->Min += V;
+    Rect->Max = Rect->Min + RectSize;
+}
+
+rect2 Add(rect2 Rect, v2 RectSize, v2 V)
+{
+    Add(&Rect, RectSize, V);
+    return Rect;
+}
+
+bool operator>(v2 A, v2 B)
+{
+    bool Result = A.X > B.X && A.Y > B.Y;
+    return Result;
+}
+
+bool operator>=(v2 A, v2 B)
+{
+    bool Result = A.X >= B.X && A.Y >= B.Y;
+    return Result;
+}
+
+bool operator<=(v2 A, v2 B)
+{
+    bool Result = A.X <= B.X && A.Y <= B.Y;
+    return Result;
+}
+
+bool operator<(v2 A, v2 B)
+{
+    bool Result = A.X < B.X && A.Y < B.Y;
+    return Result;
+}
+
+rect2
+RectFromPosSize(v2 Position, v2 Size)
+{
+    rect2 Result = {
+        Position,
+        Position + Size,
+    };
+    return Result;
+}
+
+rect2 RectFromCenterSize(v2 Center, v2 Size)
+{
+    rect2 Result;
+    Result.Min = Center - 0.5f*Size;
+    Result.Max = Result.Min + Size;
+    return Result;
+}
+
+rect2
+RectFromCenterRadius(v2 Center, float Radius)
+{
+    v2 Min = V2(Center.X - Radius, Center.Y - Radius);
+    v2 Max = V2(Center.X + Radius, Center.Y + Radius);
+    rect2 Result = { Min, Max };
+    return Result;
+}
+
+rect2
+RectFromCenterRadius(v2 Center, v2 Radius)
+{
+    v2 Min = V2(Center.X - Radius.X, Center.Y - Radius.Y);
+    v2 Max = V2(Center.X + Radius.X, Center.Y + Radius.Y);
+    rect2 Result = { Min, Max };
+    return Result;
+}
+
+bool
+IsValid(rect2 R)
+{
+    bool Result = R.Min != R.Max;
+    return Result;
+}
+
+quad2
+QuadFromPosSize(v2 Position, v2 Size)
+{
+    v2 BottomLeft = { Position.X, Position.Y };
+    v2 BottomRight = BottomLeft + V2(Size.X, 0.0f);
+    v2 TopLeft = BottomLeft + V2(0.0f, Size.Y);
+    v2 TopRight = BottomLeft + Size;
+    quad2 Result = { BottomLeft, BottomRight, TopRight, TopLeft };
+    return Result;
+}
+
+union rect2_sides
+{
+    /* Yes, the order does matter; do not change it. */
+    struct 
+    {
+        line2 Left;
+        line2 Right;
+        line2 Bottom;
+        line2 Top;
+    };
+    line2 Sides[4];
+};
+direction GlobalRect2SidesDirection[] = {Direction_Down, Direction_Right, Direction_Up, Direction_Left};
+rect2_sides GetSides(rect2 Rect)
+{
+    v2 Corners[4];
+    GetCorners(Rect, Corners);
+
+    /* Order matters. Do not change. */
+    rect2_sides Result;
+    Result.Bottom = LINE2(Corners[RECT_BOTTOMLEFT], Corners[RECT_BOTTOMRIGHT]);
+    Result.Right = LINE2(Corners[RECT_BOTTOMRIGHT], Corners[RECT_TOPRIGHT]);
+    Result.Top = LINE2(Corners[RECT_TOPRIGHT], Corners[RECT_TOPLEFT]);
+    Result.Left = LINE2(Corners[RECT_TOPLEFT], Corners[RECT_BOTTOMLEFT]);
+    return Result;
+}
+
 v2
 GetCenter(rect2 *Rect)
 {
-    v2 Result = Rect->Min + 0.5f*(Rect->Max - Rect->Min);
+    //v2 Result = Rect->Min + 0.5f*(Rect->Max - Rect->Min);
+    v2 Result = 0.5f*(Rect->Min + Rect->Max);
     return Result;
 }
 
@@ -1861,49 +2087,42 @@ GetAdjacentEdges(tri2 Tri, v2 Vertex, line2 *Out_Edge0, line2 *Out_Edge1)
     return Result;
 }
 
-bool CheckOverlaps(v2 P, line2 L)
+bool CheckPointOnLine(v2 P, line2 L, float *tPtr = NULL)
 {
     bool Result = false;
 
-    if (CheckCollinear(P, L.P1, L.P2))
+#if 0
+    float LineLength = GetDistance(L.P1, L.P2);
+    float P1ToPointLength = GetDistance(L.P1, P);
+    float PointToP2Length = GetDistance(P, L.P2);
+    float P1ToPointToP2Length = P1ToPointLength + PointToP2Length;
+    if (IsWithinTolerance(LineLength, P1ToPointToP2Length))
     {
-        /* Now check to see if they overlap. */
-
-        v2 A = L.P1;
-        v2 B = L.P2;
-
-        /* Do X. */
+        if (tPtr)
         {
-            /* Ensure A < B. */
-            if (A.X > B.X)
-            {
-                float Tmp = A.X;
-                A.X = B.X;
-                B.X = Tmp;
-            }
-
-            if (P.X > A.X && P.X < B.X)
-            {
-                Result = true;
-            }
+            float t = P1ToPointLength/LineLength;
+            *tPtr = t;
         }
+        Result = true;
+    }
+#else /* This method is faster. */
+    v2 A = L.P1;
+    v2 B = L.P2;
 
-        /* Do Y. */
+    float tx = (P.X - A.X)/(B.X - A.X);
+    float ty = (P.Y - A.Y)/(B.Y - A.Y);
+    if (IsWithinTolerance(tx, ty))
+    {
+        if (GTE_Tolerance(tx, 0.0f) && LTE_Tolerance(tx, 1.0f))
         {
-            /* Ensure A < B. */
-            if (A.Y > B.Y)
+            if (tPtr)
             {
-                float Tmp = A.Y;
-                A.Y = B.Y;
-                B.Y = Tmp;
+                *tPtr = tx;
             }
-
-            if (P.Y > A.Y && P.Y < B.Y)
-            {
-                Result = true;
-            }
+            Result = true;
         }
     }
+#endif
 
     return Result;
 }
@@ -1918,7 +2137,7 @@ bool CheckInside(v2 Point, tri2 Tri, bool *IsPointOnEdge_Out = NULL)
     for (int EdgeIdx = 0; EdgeIdx < ArrayCount(Edges); EdgeIdx++)
     {
         line2 Edge = Edges[EdgeIdx];
-        if (CheckOverlaps(Point, Edge))
+        if (CheckPointOnLine(Point, Edge))
         {
             Result = true;
             break;
@@ -1966,14 +2185,6 @@ bool CheckInside(v2 Point, tri2 Tri, bool *IsPointOnEdge_Out = NULL)
     return Result;
 }
 
-bool
-IsInside(v2 Point, rect2 Rectangle)
-{
-    bool Result = (Point.X >= Rectangle.Min.X && Point.X <= Rectangle.Max.X &&
-                   Point.Y >= Rectangle.Min.Y && Point.Y <= Rectangle.Max.Y);
-    return Result;
-}
-
 v2
 GetIntersectionYPlane(ray2 A, float Y)
 {
@@ -2007,7 +2218,7 @@ GetIntersection(ray2 A, ray2 B, v2 *PointOfIntersection_Out, bool BackwardsAllow
 {
     v2 PointOfIntersection = {};
     float u = 0, v = 0;
-    bool DoesIntersect = false;
+    bool CheckIntersects = false;
 
     /* The following three lines were copied and pasted. */
     float dx = B.Pos.X - A.Pos.X;
@@ -2025,7 +2236,7 @@ GetIntersection(ray2 A, ray2 B, v2 *PointOfIntersection_Out, bool BackwardsAllow
            (u >= 0.0f && v >= 0.0f))
         {
             PointOfIntersection = A.Pos + u*A.Dir;
-            DoesIntersect = true;
+            CheckIntersects = true;
         }
     }
     else
@@ -2034,11 +2245,11 @@ GetIntersection(ray2 A, ray2 B, v2 *PointOfIntersection_Out, bool BackwardsAllow
 
         if(A.Dir.X == 0.0f /*&& B.Dir.X == 0.0f*/)
         {
-            DoesIntersect = (A.Pos.X == B.Pos.X);
+            CheckIntersects = (A.Pos.X == B.Pos.X);
         }
         else if(A.Dir.Y == 0.0f /*&& B.Dir.Y == 0.0f*/)
         {
-            DoesIntersect = (A.Pos.Y == B.Pos.Y);
+            CheckIntersects = (A.Pos.Y == B.Pos.Y);
         }
         else
         {
@@ -2047,13 +2258,13 @@ GetIntersection(ray2 A, ray2 B, v2 *PointOfIntersection_Out, bool BackwardsAllow
             float ty = (B.Pos.Y - A.Pos.Y) / A.Dir.Y;
 
             float Difference = Abs(tx - ty);
-            DoesIntersect = (Difference < TOLERANCE);
+            CheckIntersects = (Difference < TOLERANCE);
         }
 
-        if(DoesIntersect)
+        if(CheckIntersects)
         {
             PointOfIntersection = Lerp(A.Pos, 0.5f, B.Pos);
-            DoesIntersect = true;
+            CheckIntersects = true;
         }
     }
 
@@ -2072,7 +2283,7 @@ GetIntersection(ray2 A, ray2 B, v2 *PointOfIntersection_Out, bool BackwardsAllow
         *v_Out = v;
     }
 
-    return DoesIntersect;
+    return CheckIntersects;
 }
 
 bool GetIntersection(ray2 Ray, line2 Line, v2 *PointOfIntersection)
@@ -2086,13 +2297,13 @@ bool GetIntersection(ray2 Ray, line2 Line, v2 *PointOfIntersection)
     return (v >= 0.0f && v <= 1.0f);
 }
 
-bool Intersects(ray2 Ray, line2 Line)
+bool CheckIntersects(ray2 Ray, line2 Line)
 {
     bool Result = GetIntersection(Ray, Line, NULL);
     return Result;
 }
 
-bool DoesIntersect(ray2 A, ray2 B)
+bool CheckIntersects(ray2 A, ray2 B)
 {
     bool Result = GetIntersection(A, B, 0);
     return Result;
@@ -2159,12 +2370,12 @@ bool CheckCollinearEdgesOverlaps(line2 A, line2 B)
 }
 
 /* Note that if LineA and LineB share a vertex, this returns true. */
-bool GetIntersection(line2 LineA, line2 LineB, v2 *PointOfIntersection_Out, bool DoEndpointsCountAsIntersection = false, bool *Overlaps_Out = NULL)
+bool GetIntersection(line2 LineA, line2 LineB, float *tPtr, bool DoEndpointsCountAsIntersection = false, bool *Overlaps_Out = NULL)
 {
     /* Copied and pasted from "Real-Time Collision Detection" pg 152. */
 
     v2 PointOfIntersection = {};
-    bool DoesIntersect = false;
+    bool CheckIntersects = false;
     if (Overlaps_Out)
     {
         *Overlaps_Out = false;
@@ -2182,7 +2393,7 @@ bool GetIntersection(line2 LineA, line2 LineB, v2 *PointOfIntersection_Out, bool
         /* They are collinear. They only intersect if they also overlap. */
         if (CheckCollinearEdgesOverlaps(LineA, LineB))
         {
-            DoesIntersect = true;
+            CheckIntersects = true;
             if (Overlaps_Out)
             {
                 *Overlaps_Out = true;
@@ -2200,31 +2411,49 @@ bool GetIntersection(line2 LineA, line2 LineB, v2 *PointOfIntersection_Out, bool
             if (!EndpointsOverlap ||
                 (EndpointsOverlap && DoEndpointsCountAsIntersection))
             {
+                if (tPtr)
+                {
+                    *tPtr = t;
+                }
                 PointOfIntersection = a + t*(b - a);
-                DoesIntersect = true;
+                CheckIntersects = true;
             }
         }
     }
 
-    if(PointOfIntersection_Out)
-    {
-        *PointOfIntersection_Out = PointOfIntersection;
-    }
-
-    return DoesIntersect;
+    return CheckIntersects;
 }
 
-bool
-DoesIntersect(line2 A, line2 B)
+bool GetIntersection(line2 LineA, line2 LineB, v2 *PointOfIntersectionPtr, bool DoEndpointsCountAsIntersection = false, bool *Overlaps_Out = NULL)
 {
-    bool Result = GetIntersection(A, B, NULL);
+    float t;
+    bool Result = GetIntersection(LineA, LineB, &t, DoEndpointsCountAsIntersection, Overlaps_Out);
+    if (Result)
+    {
+        *PointOfIntersectionPtr = Lerp(LineA.P1, t, LineA.P2);
+    }
     return Result;
 }
 
-bool
-Intersects(line2 A, line2 B, bool *Overlaps_Out = NULL)
+bool CheckIntersects(line2 A, line2 B, bool *Overlaps_Out = NULL)
 {
-    bool Result = GetIntersection(A, B, NULL, NULL, Overlaps_Out);
+    bool Result = GetIntersection(A, B, (v2 *)NULL, NULL, Overlaps_Out);
+    return Result;
+}
+
+bool CheckInside(v2 Point, rect2 Rect)
+{
+    bool Result;
+    if (IsWithinTolerance(Point.X, Rect.Min.X) || IsWithinTolerance(Point.X, Rect.Max.X) ||
+        IsWithinTolerance(Point.Y, Rect.Min.Y) || IsWithinTolerance(Point.Y, Rect.Max.Y))
+    {
+        Result = false;
+    }
+    else
+    {
+        Result = (Point.X > Rect.Min.X && Point.X < Rect.Max.X &&
+                  Point.Y > Rect.Min.Y && Point.Y < Rect.Max.Y);
+    }
     return Result;
 }
 
@@ -2250,7 +2479,7 @@ bool CheckAreParallel(line2 A, line2 B)
 }
 
 bool
-Intersects(line2 Line, tri2 Triangle)
+CheckIntersects(line2 Line, tri2 Triangle)
 {
     line2 Edges[3];
     GetEdges(Triangle, Edges);
@@ -2258,7 +2487,7 @@ Intersects(line2 Line, tri2 Triangle)
     for (int I = 0; I < 3; I++)
     {
         line2 Edge = Edges[I];
-        if (Intersects(Line, Edge) || CheckAreParallel(Line, Edge))
+        if (CheckIntersects(Line, Edge) || CheckAreParallel(Line, Edge))
         {
             Result = true;
             break;
@@ -2268,9 +2497,28 @@ Intersects(line2 Line, tri2 Triangle)
 }
 
 bool
-Intersects(tri2 Triangle, line2 Line)
+CheckIntersects(tri2 Triangle, line2 Line)
 {
-    bool Result = Intersects(Line, Triangle);
+    bool Result = CheckIntersects(Line, Triangle);
+    return Result;
+}
+
+bool CheckIntersects(line2 Line, rect2 Rect)
+{
+    v2 BottomLeft = GetBottomLeft(Rect);
+    v2 BottomRight = GetBottomRight(Rect);
+    v2 TopRight = GetTopRight(Rect);
+    v2 TopLeft = GetTopLeft(Rect);
+
+    line2 RectLine1 = LINE2(BottomLeft, BottomRight);
+    line2 RectLine2 = LINE2(BottomRight, TopRight);
+    line2 RectLine3 = LINE2(TopRight, TopLeft);
+    line2 RectLine4 = LINE2(TopLeft, BottomLeft);
+
+    bool Result = (CheckIntersects(Line, RectLine1) ||
+                   CheckIntersects(Line, RectLine2) ||
+                   CheckIntersects(Line, RectLine3) ||
+                   CheckIntersects(Line, RectLine4));
     return Result;
 }
 
@@ -2298,10 +2546,10 @@ void DebugEnsureEquilateral(tri2 Tri)
 }
 
 /* A super triangle is a equilateral triangle that encapsulates all specified points. We also add some optional padding. */
-tri2 CreateSuperTriangle(v2 *Points, int NumPoints, float Padding = 50.0f)
+tri2 CreateSuperTriangle(v2 *Points, int NumPoints, float ImguiStateWithPadding = 50.0f)
 {
     rect2 BoundingBox = CreateBoundingBox(Points, NumPoints);
-    Expand(&BoundingBox, Padding);
+    Expand(&BoundingBox, ImguiStateWithPadding);
 
     v2 TopLeft = GetTopLeft(BoundingBox);
     v2 TopRight = GetTopRight(BoundingBox);
@@ -2403,6 +2651,14 @@ void CreateConvexHull(v2 *Points, int NumPoints, v2 *ConvexHullPoints, int Conve
 
     Assert(NumConvexHullPoints > 2);
     *NumConvexHullPoints_Out = NumConvexHullPoints;
+}
+
+v2 Remap(v2 V, rect2 From, rect2 To)
+{
+    v2 Result;
+    Result.X = Remap(V.X, From.Min.X, From.Max.X, To.Min.X, To.Max.X);
+    Result.Y = Remap(V.Y, From.Min.X, From.Max.X, To.Min.X, To.Max.X);
+    return Result;
 }
 
 /* Print functions. */

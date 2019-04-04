@@ -114,12 +114,11 @@ struct ns_file
     int Size;
 };
 
-internal ns_file
-LoadFile(const char *Filename)
+ns_file LoadFile(const char *Name)
 {
     ns_file Result = {0};
 
-    FILE *File = fopen(Filename, "rb");
+    FILE *File = fopen(Name, "rb");
     Assert(File != NULL);
 
     int FileSize = 0;
@@ -151,8 +150,18 @@ int GetFileSize(FILE *File)
     return Result;
 }
 
-internal void
-Free(ns_file *File)
+bool CheckFileExists(char *Name)
+{
+    FILE *File = fopen(Name, "r");
+    bool Exists = File != NULL;
+    if (Exists)
+    {
+        fclose(File);
+    }
+    return Exists;
+}
+
+void Free(ns_file *File)
 {
     MemFree(File->Contents);
 }

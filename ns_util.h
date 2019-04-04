@@ -2,6 +2,7 @@
 #define NS_UTIL_H
 
 #include <stdint.h>
+#include "ns_string.h"
 
 
 /* Bits */

@@ -106,6 +106,18 @@ IsWithinTolerance(float ActualValue, float Value)
     return Result;
 }
 
+bool GTE_Tolerance(float A, float B)
+{
+    bool Result = IsWithinTolerance(A, B) || A > B;
+    return Result;
+}
+
+bool LTE_Tolerance(float A, float B)
+{
+    bool Result = IsWithinTolerance(A, B) || A < B;
+    return Result;
+}
+
 inline internal float
 ToRadians(float Degrees)
 {
@@ -194,6 +206,12 @@ Ceil(float A)
     return Result;
 }
 
+internal void
+Floor(float *A)
+{
+    *A = (float)floorf(*A);
+}
+
 internal int
 Floor(float A)
 {
@@ -220,6 +238,12 @@ inline internal float
 Abs(float X)
 {
     float Result = X < 0 ? -X : X;
+    return Result;
+}
+
+int Abs(int X)
+{
+    int Result = X < 0 ? -X : X;
     return Result;
 }
 
@@ -435,6 +459,12 @@ IsInfinity(float X)
     return Result;
 }
 
+float Lerp(float A, float t, float B)
+{
+    float Result = A + t*(B - A);
+    return Result;
+}
+
 internal uint32_t
 ConvertStringToInt(const char *String)
 {
@@ -601,6 +631,32 @@ FixBigEndianArray(uint8_t *Array, int Size)
 {
     FixBigEndianArray((void *)Array, Size, sizeof(*Array));
     return Array;
+}
+
+void EnsureSmallerIsFirst(float *X, float *Y)
+{
+    if (*X > *Y)
+    {
+        Swap(X, Y);
+    }
+}
+
+float Remap(float A, float FromMin, float FromMax, float ToMin, float ToMax)
+{
+    float FromRange = FromMax - FromMin;
+    float ToRange = ToMax - ToMin;
+    float Normalized = (A - FromMin)/FromRange;
+    float Result = ToMin + Normalized*ToRange;
+    return Result;
+}
+
+uint32_t Join(uint8_t A, uint8_t B, uint8_t C, uint8_t D)
+{
+    uint32_t Result = ((A << 24) |
+                       (B << 16) |
+                       (C << 8) |
+                       (D << 0));
+    return Result;
 }
 
 #endif
