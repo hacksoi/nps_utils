@@ -151,9 +151,18 @@ tr_texture *GetTexture(texture_renderer *TextureRenderer, const char *Name)
     return Result;
 }
 
-void DrawTexture(texture_renderer *TextureRenderer, const char *Name, rect2 PosCoords = RECT2(V2_ZERO, V2_ZERO), rect2 TexCoordsPixels = RECT2(V2_ZERO, V2_ZERO))
+void DrawTexture(texture_renderer *TextureRenderer, const char *Name, rect2 PosCoords = RECT2(V2_ZERO, V2_ZERO), rect2 TexCoordsPixels = RECT2(V2_ZERO, V2_ZERO),
+                 bool DrawReversed = false)
 {
     tr_texture *Tex = GetTexture(TextureRenderer, Name);
+
+    if (TextureRenderer->LastTextureId != INVALID_TEXTURE_ID)
+    {
+        if (TextureRenderer->LastTextureId != Tex->Id)
+        {
+            Render(TextureRenderer);
+        }
+    }
 
     if (PosCoords.Min == V2_ZERO &&
         PosCoords.Max == V2_ZERO)
@@ -179,12 +188,9 @@ void DrawTexture(texture_renderer *TextureRenderer, const char *Name, rect2 PosC
     TexCoords /= Tex->Dimensions;
     Assert(TexCoords.Min >= V2_ZERO && TexCoords.Max >= V2_ZERO);
 
-    if (TextureRenderer->LastTextureId != INVALID_TEXTURE_ID)
+    if (DrawReversed)
     {
-        if (TextureRenderer->LastTextureId != Tex->Id)
-        {
-            Render(TextureRenderer);
-        }
+        Swap(&TexCoords.Min.X, &TexCoords.Max.X);
     }
 
     InsertTexture((float *)TextureRenderer->Common.VertexData, TextureRenderer->Common.MaxVertexDataBytes, &TextureRenderer->Common.NumVertexData,
