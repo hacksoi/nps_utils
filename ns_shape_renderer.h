@@ -1,6 +1,7 @@
 #ifndef NS_SHAPE_RENDERER_H
 #define NS_SHAPE_RENDERER_H
 
+
 #include "ns_common_renderer.h"
 #include "ns_opengl_functions.h"
 #include "ns_common.h"
