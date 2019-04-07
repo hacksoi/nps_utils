@@ -282,6 +282,13 @@ void v2::operator/=(v2 Divisor)
     this->Y /= Divisor.Y;
 }
 
+v2 operator/(v2 V, v2 Divisor)
+{
+    V.X /= Divisor.X;
+    V.Y /= Divisor.Y;
+    return V;
+}
+
 inline float &
 v2::operator[](int ComponentIdx)
 {
@@ -1643,8 +1650,7 @@ bool CheckContainsAnySameVertices(tri2 Tri, line2 Edge)
 
 /* Rectangles */
 
-rect2
-RECT2(v2 Min, v2 Max)
+rect2 RECT2(v2 Min, v2 Max)
 {
     rect2 Result;
     Result.Min = Min;
@@ -1652,10 +1658,25 @@ RECT2(v2 Min, v2 Max)
     return Result;
 }
 
+rect2 RECT2(float MinX, float MinY, float MaxX, float MaxY)
+{
+    rect2 Result;
+    Result.Min = V2(MinX, MinY);
+    Result.Max = V2(MaxX, MaxY);
+    return Result;
+}
+
 void rect2::operator/=(v2 Divisor)
 {
     this->Min /= Divisor;
     this->Max /= Divisor;
+}
+
+rect2 operator/(rect2 Rect, v2 Divisor)
+{
+    Rect.Min /= Divisor;
+    Rect.Max /= Divisor;
+    return Rect;
 }
 
 rect2 CreateRectFromArbitraryPoints(v2 StartPos, v2 EndPos)

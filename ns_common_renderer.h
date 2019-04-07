@@ -127,6 +127,16 @@ EndRender(common_renderer *CommonRenderer)
     glBindBuffer(GL_ARRAY_BUFFER, CommonRenderer->PrevVbo);
 }
 
+void SetWindowSize(common_renderer *CommonRenderer, int NewWindowWidth, int NewWindowHeight)
+{
+    CommonRenderer->WindowHeight = NewWindowHeight;
+    CommonRenderer->WindowWidth = NewWindowWidth;
+
+    /* Let's make the bad decision of being clever and changing the camera pos too... */
+    v2 NewCameraPos = V2((float)NewWindowWidth/2.0f, (float)NewWindowHeight/2.0f);
+    CommonRenderer->CameraPos = NewCameraPos;
+}
+
 internal void
 Free(common_renderer *CommonRenderer)
 {

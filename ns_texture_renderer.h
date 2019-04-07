@@ -151,14 +151,11 @@ tr_texture *GetTexture(texture_renderer *TextureRenderer, const char *Name)
     return Result;
 }
 
-void DrawTexture(texture_renderer *TextureRenderer, const char *Name, rect2 PosCoords = RECT2(V2_ZERO, V2_ZERO), rect2 TexCoordsPixels = RECT2(V2_ZERO, V2_ZERO),
-                 bool DrawReversed = false)
+void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, tr_texture *Texture, rect2 PosCoords = RECT2(V2_ZERO, V2_ZERO), rect2 TexCoords = RECT2(V2_ZERO, V2_ZERO), bool DrawReversed = false)
 {
-    tr_texture *Tex = GetTexture(TextureRenderer, Name);
-
     if (TextureRenderer->LastTextureId != INVALID_TEXTURE_ID)
     {
-        if (TextureRenderer->LastTextureId != Tex->Id)
+        if (TextureRenderer->LastTextureId != Texture->Id)
         {
             Render(TextureRenderer);
         }
@@ -171,22 +168,12 @@ void DrawTexture(texture_renderer *TextureRenderer, const char *Name, rect2 PosC
         PosCoords = RECT2(V2(0.0f, 0.0), V2(TextureRenderer->Common.WindowWidth, TextureRenderer->Common.WindowHeight));
     }
 
-    if (TexCoordsPixels.Min == V2_ZERO && 
-        TexCoordsPixels.Max == V2_ZERO)
+    if (TexCoords.Min == V2_ZERO && 
+        TexCoords.Max == V2_ZERO)
     {
         /* Do the entire image. */
-        TexCoordsPixels = RECT2(V2(0.0f, Tex->Dimensions.Y), V2(Tex->Dimensions.X, 0.0f));
+        TexCoords = RECT2(V2(0.0f, 0.0f), V2(1.0f, 1.0f));
     }
-
-    rect2 TexCoords = TexCoordsPixels;
-
-    /* Fix Y coord. */
-    TexCoords.Min.Y = Tex->Dimensions.Y - TexCoordsPixels.Min.Y;
-    TexCoords.Max.Y = Tex->Dimensions.Y - TexCoordsPixels.Max.Y;
-
-    /* Normalize. */
-    TexCoords /= Tex->Dimensions;
-    Assert(TexCoords.Min >= V2_ZERO && TexCoords.Max >= V2_ZERO);
 
     if (DrawReversed)
     {
@@ -196,7 +183,38 @@ void DrawTexture(texture_renderer *TextureRenderer, const char *Name, rect2 PosC
     InsertTexture((float *)TextureRenderer->Common.VertexData, TextureRenderer->Common.MaxVertexDataBytes, &TextureRenderer->Common.NumVertexData,
                   QUAD2(PosCoords), QUAD2(TexCoords));
 
-    TextureRenderer->LastTextureId = Tex->Id;
+    TextureRenderer->LastTextureId = Texture->Id;
+}
+
+void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, const char *Name, rect2 PosCoords = RECT2(V2_ZERO, V2_ZERO), rect2 TexCoords = RECT2(V2_ZERO, V2_ZERO), bool DrawReversed = false)
+{
+    tr_texture *Texture = GetTexture(TextureRenderer, Name);
+    DrawTextureNormalizedTexCoords(TextureRenderer, Texture, PosCoords, TexCoords, DrawReversed);
+}
+
+void DrawTexture(texture_renderer *TextureRenderer, const char *Name, rect2 PosCoords = RECT2(V2_ZERO, V2_ZERO), rect2 TexCoordsPixels = RECT2(V2_ZERO, V2_ZERO), bool DrawReversed = false)
+{
+    tr_texture *Tex = GetTexture(TextureRenderer, Name);
+
+    if (TexCoordsPixels.Min == V2_ZERO && 
+        TexCoordsPixels.Max == V2_ZERO)
+    {
+        /* Do the entire image. */
+        TexCoordsPixels = RECT2(V2(0.0f, 0.0f), V2(Tex->Dimensions.X, Tex->Dimensions.Y));
+    }
+
+    /* Normalize. */
+    rect2 TexCoords = TexCoordsPixels/Tex->Dimensions;
+    Assert(TexCoords.Min >= V2_ZERO && TexCoords.Max >= V2_ZERO);
+
+    DrawTextureNormalizedTexCoords(TextureRenderer, Name, PosCoords, TexCoords, DrawReversed);
+}
+
+unsigned int GetTextureId(texture_renderer *TextureRenderer, const char *TextureName)
+{
+    tr_texture *Texture = GetTexture(TextureRenderer, TextureName);
+    unsigned int Result = Texture->Id;
+    return Result;
 }
 
 void SetCameraPos(texture_renderer *TextureRenderer, v2 NewCameraPos)
@@ -211,8 +229,7 @@ void SetZoom(texture_renderer *TextureRenderer, float NewZoom)
 
 void SetWindowSize(texture_renderer *TextureRenderer, int NewWindowWidth, int NewWindowHeight)
 {
-    TextureRenderer->Common.WindowHeight = NewWindowHeight;
-    TextureRenderer->Common.WindowWidth = NewWindowWidth;
+    SetWindowSize(&TextureRenderer->Common, NewWindowWidth, NewWindowHeight);
 }
 
 void SetFragShaderDebugValue(texture_renderer *TextureRenderer, int NewDebugValue)

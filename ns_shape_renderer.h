@@ -313,14 +313,9 @@ void SetZoom(shape_renderer *ShapeRenderer, float NewZoom)
     ShapeRenderer->Common.Zoom = NewZoom;
 }
 
-void SetWindowSize(shape_renderer *ShapeRenderer, int WindowWidth, int WindowHeight)
+void SetWindowSize(shape_renderer *ShapeRenderer, int NewWindowWidth, int NewWindowHeight)
 {
-    ShapeRenderer->Common.WindowWidth = WindowWidth;
-    ShapeRenderer->Common.WindowHeight = WindowHeight;
-
-    /* Let's make the bad decision of being clever and changing the camera pos too... */
-    v2 NewCameraPos = V2((float)WindowWidth/2.0f, (float)WindowHeight/2.0f);
-    SetCameraPos(ShapeRenderer, NewCameraPos);
+    SetWindowSize(&ShapeRenderer->Common, NewWindowWidth, NewWindowHeight);
 }
 
 v2 ConvertScreenToGame(shape_renderer *ShapeRenderer, v2 ScreenPoint)
