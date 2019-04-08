@@ -7,6 +7,7 @@
 
 #define V2_ZERO V2(0.0f, 0.0f)
 #define V2I_ZERO V2I(0, 0)
+#define RECT2_ZERO RECT2(V2_ZERO, V2_ZERO)
 
 union v2
 {
@@ -1663,6 +1664,12 @@ rect2 RECT2(float MinX, float MinY, float MaxX, float MaxY)
     rect2 Result;
     Result.Min = V2(MinX, MinY);
     Result.Max = V2(MaxX, MaxY);
+    return Result;
+}
+
+bool operator==(rect2 A, rect2 B)
+{
+    bool Result = A.Min == B.Min && A.Max == B.Max;
     return Result;
 }
 

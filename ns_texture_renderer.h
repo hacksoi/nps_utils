@@ -186,28 +186,34 @@ void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, tr_textur
     TextureRenderer->LastTextureId = Texture->Id;
 }
 
-void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, const char *Name, rect2 PosCoords = RECT2(V2_ZERO, V2_ZERO), rect2 TexCoords = RECT2(V2_ZERO, V2_ZERO), bool DrawReversed = false)
+void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, const char *Name, rect2 PosCoords = RECT2_ZERO, rect2 TexCoords = RECT2_ZERO, bool DrawReversed = false)
 {
     tr_texture *Texture = GetTexture(TextureRenderer, Name);
     DrawTextureNormalizedTexCoords(TextureRenderer, Texture, PosCoords, TexCoords, DrawReversed);
 }
 
-void DrawTexture(texture_renderer *TextureRenderer, const char *Name, rect2 PosCoords = RECT2(V2_ZERO, V2_ZERO), rect2 NormalizedTexCoords = RECT2(V2_ZERO, V2_ZERO), bool DrawReversed = false)
+void DrawTexture(texture_renderer *TextureRenderer, const char *Name, rect2 PosCoords = RECT2_ZERO, rect2 TexCoords = RECT2_ZERO, bool DrawReversed = false)
 {
     tr_texture *Tex = GetTexture(TextureRenderer, Name);
 
-    if (NormalizedTexCoords.Min == V2_ZERO && 
-        NormalizedTexCoords.Max == V2_ZERO)
+    if (TexCoords == RECT2_ZERO)
     {
         /* Do the entire image. */
-        NormalizedTexCoords = RECT2(V2(0.0f, 0.0f), V2(Tex->Dimensions.X, Tex->Dimensions.Y));
+        TexCoords = RECT2(V2(0.0f, 0.0f), V2(Tex->Dimensions.X, Tex->Dimensions.Y));
     }
 
     /* Normalize. */
-    rect2 TexCoords = NormalizedTexCoords/Tex->Dimensions;
-    Assert(TexCoords.Min >= V2_ZERO && TexCoords.Max >= V2_ZERO);
+    rect2 NormalizedTexCoords = TexCoords/Tex->Dimensions;
+    Assert(NormalizedTexCoords.Min >= V2_ZERO && NormalizedTexCoords.Max >= V2_ZERO);
 
-    DrawTextureNormalizedTexCoords(TextureRenderer, Name, PosCoords, TexCoords, DrawReversed);
+    DrawTextureNormalizedTexCoords(TextureRenderer, Name, PosCoords, NormalizedTexCoords, DrawReversed);
+}
+
+void DrawTexture(texture_renderer *TextureRenderer, const char *Name, v2 Pos, rect2 TexCoords, bool DrawReversed = false)
+{
+    v2 TexCoordsDimensions = GetSize(TexCoords);
+    rect2 PosCoords = RECT2(Pos, Pos + TexCoordsDimensions);
+    DrawTexture(TextureRenderer, Name, PosCoords, TexCoords, DrawReversed);
 }
 
 unsigned int GetTextureId(texture_renderer *TextureRenderer, const char *TextureName)
