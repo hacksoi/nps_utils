@@ -185,7 +185,7 @@ int StringToInt(char *String, int GetLength)
 
 int StringToInt(char *String)
 {
-    int GetLength = strlen(String);
+    int GetLength = (int)strlen(String);
     int Result = StringToInt(String, GetLength);
     return Result;
 }
