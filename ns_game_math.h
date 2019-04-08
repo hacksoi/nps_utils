@@ -1807,6 +1807,12 @@ void Add(rect2 *Rect, v2 RectSize, v2 V)
     Rect->Max = Rect->Min + RectSize;
 }
 
+void Add(rect2 *Rect, float RectSizeScalar, v2 V)
+{
+    v2 Size = V2(RectSizeScalar, RectSizeScalar);
+    Add(Rect, Size, V);
+}
+
 rect2 Add(rect2 Rect, v2 RectSize, v2 V)
 {
     Add(&Rect, RectSize, V);
@@ -1844,6 +1850,14 @@ RectFromPosSize(v2 Position, v2 Size)
         Position,
         Position + Size,
     };
+    return Result;
+}
+
+rect2
+RectFromPosSize(v2 Position, float SizeScalar)
+{
+    v2 Size = V2(SizeScalar, SizeScalar);
+    rect2 Result = RectFromPosSize(Position, Size);
     return Result;
 }
 
