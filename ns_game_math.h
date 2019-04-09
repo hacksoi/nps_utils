@@ -233,6 +233,13 @@ V2(float X, float Y)
 }
 
 inline v2
+V2(v2i V)
+{
+    v2 Result = {(float)V.X, (float)V.Y};
+    return Result;
+}
+
+inline v2
 V2(float A)
 {
     v2 Result = {A, A};
@@ -282,6 +289,13 @@ void v2i::operator+=(v2i A)
 {
     this->X += A.X;
     this->Y += A.Y;
+}
+
+v2 operator/(v2 A, float B)
+{
+    A.X /= B;
+    A.Y /= B;
+    return A;
 }
 
 void v2::operator/=(v2 Divisor)

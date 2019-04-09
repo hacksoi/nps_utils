@@ -320,6 +320,8 @@ void SetWindowSize(shape_renderer *ShapeRenderer, int NewWindowWidth, int NewWin
 
 v2 ConvertScreenToGame(shape_renderer *ShapeRenderer, v2 ScreenPoint)
 {
+    /* This is just the inverse of what's happening in the vertex shader. */
+
     v2 ScreenCenter = V2((float)ShapeRenderer->Common.WindowWidth/2.0f, (float)ShapeRenderer->Common.WindowHeight/2.0f);
     ScreenPoint -= ScreenCenter;
     float InverseZoom = 1.0f/ShapeRenderer->Common.Zoom;
