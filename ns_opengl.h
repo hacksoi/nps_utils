@@ -232,23 +232,27 @@ InsertQuad(quad2 Quad, float *VertexData, int *VertexDataCount)
 }
 
 internal void
-InsertTexture(float *VertexData, int MaxVertexDataBytes, int *NumVertexData, quad2 Positions, quad2 TexCoord)
+InsertTexture(float *VertexData, int MaxVertexDataBytes, int *NumVertexData, quad2 Positions, float Z, quad2 TexCoord)
 {
-    Assert(*NumVertexData + 24 <= MaxVertexDataBytes);
+    Assert(Z != 0.0f);
+    Assert(*NumVertexData + 30 <= MaxVertexDataBytes);
 
     {
         VertexData[(*NumVertexData)++] = Positions.BottomLeft.X;
         VertexData[(*NumVertexData)++] = Positions.BottomLeft.Y;
+        VertexData[(*NumVertexData)++] = Z;
         VertexData[(*NumVertexData)++] = TexCoord.BottomLeft.X;
         VertexData[(*NumVertexData)++] = TexCoord.BottomLeft.Y;
 
         VertexData[(*NumVertexData)++] = Positions.BottomRight.X;
         VertexData[(*NumVertexData)++] = Positions.BottomRight.Y;
+        VertexData[(*NumVertexData)++] = Z;
         VertexData[(*NumVertexData)++] = TexCoord.BottomRight.X;
         VertexData[(*NumVertexData)++] = TexCoord.BottomRight.Y;
 
         VertexData[(*NumVertexData)++] = Positions.TopLeft.X;
         VertexData[(*NumVertexData)++] = Positions.TopLeft.Y;
+        VertexData[(*NumVertexData)++] = Z;
         VertexData[(*NumVertexData)++] = TexCoord.TopLeft.X;
         VertexData[(*NumVertexData)++] = TexCoord.TopLeft.Y;
     }
@@ -256,27 +260,30 @@ InsertTexture(float *VertexData, int MaxVertexDataBytes, int *NumVertexData, qua
     {
         VertexData[(*NumVertexData)++] = Positions.BottomRight.X;
         VertexData[(*NumVertexData)++] = Positions.BottomRight.Y;
+        VertexData[(*NumVertexData)++] = Z;
         VertexData[(*NumVertexData)++] = TexCoord.BottomRight.X;
         VertexData[(*NumVertexData)++] = TexCoord.BottomRight.Y;
 
         VertexData[(*NumVertexData)++] = Positions.TopRight.X;
         VertexData[(*NumVertexData)++] = Positions.TopRight.Y;
+        VertexData[(*NumVertexData)++] = Z;
         VertexData[(*NumVertexData)++] = TexCoord.TopRight.X;
         VertexData[(*NumVertexData)++] = TexCoord.TopRight.Y;
 
         VertexData[(*NumVertexData)++] = Positions.TopLeft.X;
         VertexData[(*NumVertexData)++] = Positions.TopLeft.Y;
+        VertexData[(*NumVertexData)++] = Z;
         VertexData[(*NumVertexData)++] = TexCoord.TopLeft.X;
         VertexData[(*NumVertexData)++] = TexCoord.TopLeft.Y;
     }
 }
 
 internal void
-InsertTexture(float *VertexData, int MaxVertexDataBytes, int *NumVertexData, rect2 PosRect, rect2 TexCoordRect)
+InsertTexture(float *VertexData, int MaxVertexDataBytes, int *NumVertexData, rect2 PosRect, float Z, rect2 TexCoordRect)
 {
     quad2 PosQuad = QUAD2(PosRect);
     quad2 TexCoordQuad = QUAD2(TexCoordRect);
-    InsertTexture(VertexData, MaxVertexDataBytes, NumVertexData, PosQuad, TexCoordQuad);
+    InsertTexture(VertexData, MaxVertexDataBytes, NumVertexData, PosQuad, Z, TexCoordQuad);
 }
 
 internal void

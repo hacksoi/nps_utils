@@ -232,6 +232,13 @@ V2(float X, float Y)
     return Result;
 }
 
+inline v2
+V2(float A)
+{
+    v2 Result = {A, A};
+    return Result;
+}
+
 v2d V2D(v2 V)
 {
     v2d Result = {V.X, V.Y};
@@ -1655,6 +1662,14 @@ rect2 RECT2(v2 Min, v2 Max)
 {
     rect2 Result;
     Result.Min = Min;
+    Result.Max = Max;
+    return Result;
+}
+
+rect2 RECT2(float MinX, float MinY, v2 Max)
+{
+    rect2 Result;
+    Result.Min = V2(MinX, MinY);
     Result.Max = Max;
     return Result;
 }

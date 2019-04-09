@@ -6,51 +6,6 @@
 #include "ns_common_renderer.h"
 #include "ns_opengl.h"
 
-const char *GlobalTextureRendererVertexShaderSource = R"STR(
-#version 330 core
-layout (location = 0) in vec2 Pos;
-layout (location = 1) in vec2 vsTexCoord;
-
-uniform float Zoom;
-uniform vec2 WindowDimensions;
-uniform vec2 CameraPos;
-
-out vec2 fsTexCoord;
-
-void main()
-{
-    vec2 ViewSpacePos = Pos - CameraPos;
-    ViewSpacePos *= Zoom;
-    ViewSpacePos += 0.5f*WindowDimensions;
-#if 1
-    vec2 SnappedViewSpacePos = floor(ViewSpacePos);
-    vec2 ClipPos = ((2.0f * SnappedViewSpacePos) / WindowDimensions) - 1.0f;
-#else
-    vec2 ClipPos = ((2.0f * ViewSpacePos) / WindowDimensions) - 1.0f;
-#endif
-    gl_Position = vec4(ClipPos, 0.0, 1.0f);
-
-    fsTexCoord = vsTexCoord;
-}
-)STR";
-
-const char *GlobalTextureRendererFragmentShaderSource = R"STR(
-#version 330 core
-in vec2 fsTexCoord;
-
-uniform sampler2D Texture;
-
-uniform int fsDebugValue;
-
-out vec4 OutputColor;
-
-void main()
-{
-    vec4 TexColor = texture(Texture, fsTexCoord);
-    OutputColor = vec4(TexColor.r, TexColor.g, TexColor.b, TexColor.a);
-}
-)STR";
-
 struct common_renderer
 {
     int WindowWidth;
@@ -69,7 +24,7 @@ struct common_renderer
     int FragShaderDebugValue;
 };
 
-internal common_renderer 
+internal common_renderer
 CreateCommonRenderer(int WindowWidth, int WindowHeight, int MaxVertexDataBytes,
                      const char *VertexShaderSource, const char *FragmentShaderSource)
 {
@@ -81,22 +36,6 @@ CreateCommonRenderer(int WindowWidth, int WindowHeight, int MaxVertexDataBytes,
     Result.ShaderProgram = CreateShaderProgramVF(VertexShaderSource, FragmentShaderSource);
     Result.CameraPos = V2((float)WindowWidth/2.0f, (float)WindowHeight/2.0f);
     Result.Zoom = 1.0f;
-    return Result;
-}
-
-internal common_renderer
-CreateGenericTextureCommonRenderObjects(int WindowWidth, int WindowHeight, int MaxVertexDataBytes, 
-                                        const char *VertexShaderSource, const char *FragmentShaderSource)
-{
-    common_renderer Result = CreateCommonRenderer(WindowWidth, WindowHeight, MaxVertexDataBytes,
-                                                  VertexShaderSource, FragmentShaderSource);
-
-    Result.Vbo = CreateAndBindVertexBuffer();
-    Result.Vao = CreateAndBindVertexArray();
-    SetVertexAttributeFloat(0, 2, 4, 0);
-    SetVertexAttributeFloat(1, 2, 4, 2);
-    glBindVertexArray(0);
-
     return Result;
 }
 
