@@ -1,4 +1,0 @@
--the problem right now is hoisting the poll_fds out. there should probably be two identical ones: one for sockets and one for websockets.
-
--instead of returning NS_ERROR, return the status code of the failed function call
--abstract thread stuff away (ns_threads.h)

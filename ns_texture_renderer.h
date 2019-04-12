@@ -45,20 +45,28 @@ out vec2 fsTexCoord;
 
 void main()
 {
+    vec2 HalfWindowDimensions = 0.5f*WindowDimensions;
 #if 0
-    vec2 CameraPosZAdjusted = CameraPos / Pos.z;
+    vec2 CameraPosAdjusted = CameraPos - HalfWindowDimensions;
+    vec2 CameraPosZAdjusted = CameraPosAdjusted/Pos.z;
     vec2 ViewSpacePos = Pos.xy - CameraPosZAdjusted;
-#else
-    vec2 ViewSpacePos = Pos.xy - CameraPos;
-#endif
     ViewSpacePos *= Zoom;
-    ViewSpacePos += 0.5f*WindowDimensions;
-#if 1
+#else
+#if 0
+    vec2 CameraPosZAdjusted = CameraPos/Pos.z;
+    vec2 ViewSpacePos = Pos.xy - CameraPosZAdjusted;
+    ViewSpacePos *= Zoom;
+    ViewSpacePos += HalfWindowDimensions;
+#else
+    vec2 CameraPosAdjusted = CameraPos - HalfWindowDimensions;
+    vec2 CameraPosZAdjusted = CameraPosAdjusted/Pos.z;
+    vec2 ViewSpacePos = Pos.xy - CameraPosZAdjusted;
+    ViewSpacePos = Zoom*(ViewSpacePos - HalfWindowDimensions) + HalfWindowDimensions;
+#endif
+#endif
+
     vec2 SnappedViewSpacePos = floor(ViewSpacePos);
     vec2 ClipPos = ((2.0f * SnappedViewSpacePos) / WindowDimensions) - 1.0f;
-#else
-    vec2 ClipPos = ((2.0f * ViewSpacePos) / WindowDimensions) - 1.0f;
-#endif
     gl_Position = vec4(ClipPos, 0.0, 1.0f);
 
     fsTexCoord = vsTexCoord;

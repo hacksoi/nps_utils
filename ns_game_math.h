@@ -18,11 +18,12 @@ union v2
         float X, Y;
     };
 
-    float &operator[](int ComponentIdx);
-    void operator+=(v2 A);
-    void operator-=(v2 A);
-    void operator*=(float A);
+    float &operator[](int);
+    void operator+=(v2);
+    void operator-=(v2);
+    void operator*=(float);
     void operator/=(v2);
+    void operator/=(float);
 };
 
 struct v2i
@@ -283,6 +284,12 @@ v2i operator-(v2i A, v2i B)
 {
     v2i Result = V2I(A.X - B.X, A.Y - B.Y);
     return Result;
+}
+
+void v2::operator/=(float A)
+{
+    this->X /= A;
+    this->Y /= A;
 }
 
 void v2i::operator+=(v2i A)
@@ -2733,6 +2740,11 @@ v2 Remap(v2 V, rect2 From, rect2 To)
 }
 
 /* Print functions. */
+
+void Printf(const char *VName, v2 V)
+{
+    Printf("%s%f, %f\n", VName, V.X, V.Y);
+}
 
 void Printf(v2 V, bool NewLine = true)
 {
