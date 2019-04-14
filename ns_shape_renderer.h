@@ -323,16 +323,10 @@ v2 ConvertScreenToGame(shape_renderer *ShapeRenderer, v2 ScreenPoint)
     /* This is just the inverse of what's happening in the vertex shader. */
     v2 HalfWindowSize = 0.5f*V2(ShapeRenderer->Common.WindowWidth, ShapeRenderer->Common.WindowHeight);
     float InverseZoom = 1.0f/ShapeRenderer->Common.Zoom;
-#if 0
-    ScreenPoint *= InverseZoom;
-    ScreenPoint += (ShapeRenderer->Common.CameraPos - HalfWindowSize);
-    v2 Result = ScreenPoint;
-#else
     v2 RelToCenter = ScreenPoint - HalfWindowSize;
     v2 ZoomAdjusted = InverseZoom*RelToCenter;
     v2 CameraAdjusted = ZoomAdjusted + ShapeRenderer->Common.CameraPos;
     v2 Result = CameraAdjusted;
-#endif
     return Result;
 }
 

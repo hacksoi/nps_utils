@@ -46,24 +46,12 @@ out vec2 fsTexCoord;
 void main()
 {
     vec2 HalfWindowDimensions = 0.5f*WindowDimensions;
-#if 0
     vec2 CameraPosAdjusted = CameraPos - HalfWindowDimensions;
     vec2 CameraPosZAdjusted = CameraPosAdjusted/Pos.z;
     vec2 ViewSpacePos = Pos.xy - CameraPosZAdjusted;
-    ViewSpacePos *= Zoom;
-#else
-#if 0
-    vec2 CameraPosZAdjusted = CameraPos/Pos.z;
-    vec2 ViewSpacePos = Pos.xy - CameraPosZAdjusted;
-    ViewSpacePos *= Zoom;
-    ViewSpacePos += HalfWindowDimensions;
-#else
-    vec2 CameraPosAdjusted = CameraPos - HalfWindowDimensions;
-    vec2 CameraPosZAdjusted = CameraPosAdjusted/Pos.z;
-    vec2 ViewSpacePos = Pos.xy - CameraPosZAdjusted;
-    ViewSpacePos = Zoom*(ViewSpacePos - HalfWindowDimensions) + HalfWindowDimensions;
-#endif
-#endif
+    /* Apply zoom. */
+    vec2 RelToCenter = ViewSpacePos - HalfWindowDimensions;
+    ViewSpacePos = Zoom*RelToCenter + HalfWindowDimensions;
 
     vec2 SnappedViewSpacePos = floor(ViewSpacePos);
     vec2 ClipPos = ((2.0f * SnappedViewSpacePos) / WindowDimensions) - 1.0f;
