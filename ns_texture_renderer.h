@@ -17,9 +17,15 @@
 /* tr = TextureRenderer */
 struct tr_texture
 {
+    bool IsSubTexture;
+
     const char *Name;
     v2 Dimensions;
     GLuint Id;
+
+    /* Sub texture stuff. */
+    const char *ParentName;
+    rect2 NormalizedTexCoords;
 };
 
 struct texture_renderer
@@ -100,18 +106,36 @@ texture_renderer CreateTextureRenderer(int WindowWidth, int WindowHeight)
     return Result;
 }
 
-void AddTexture(texture_renderer *TextureRenderer, const char *Name, unsigned int TextureId, int TextureWidth, int TextureHeight)
+tr_texture *GetTexture(texture_renderer *TextureRenderer, const char *Name)
+{
+    tr_texture *Result = NULL;
+    for (int I = 0; I < TextureRenderer->NumTextures; I++)
+    {
+        tr_texture *Tex = &TextureRenderer->Textures[I];
+        if (!strcmp(Tex->Name, Name))
+        {
+            Result = Tex;
+            break;
+        }
+    }
+    Assert(Result != NULL);
+    return Result;
+}
+
+tr_texture *AddTexture(texture_renderer *TextureRenderer, const char *Name, unsigned int TextureId, int TextureWidth, int TextureHeight)
 {
     Assert(TextureId != 0);
 
-    tr_texture NewTexture;
-    NewTexture.Name = Name;
-    NewTexture.Dimensions = V2(TextureWidth, TextureHeight);
-    NewTexture.Id = TextureId;
-    ArrayAdd(TextureRenderer->Textures, TextureRenderer->NumTextures, NewTexture);
+    tr_texture *NewTexture;
+    GetLastAndAddOne(NewTexture, TextureRenderer->Textures, TextureRenderer->NumTextures);
+    NewTexture->Name = Name;
+    NewTexture->Dimensions = V2(TextureWidth, TextureHeight);
+    NewTexture->Id = TextureId;
+
+    return NewTexture;
 }
 
-void AddTexture(texture_renderer *TextureRenderer, const char *FilePath, uint32_t *PixelValuesToMask = NULL, int NumPixelValuesToMask = 0)
+tr_texture *AddTexture(texture_renderer *TextureRenderer, const char *FilePath, uint32_t *PixelValuesToMask = NULL, int NumPixelValuesToMask = 0)
 {
     int ChannelCount, TextureWidth, TextureHeight;
     stbi_set_flip_vertically_on_load(true);
@@ -171,7 +195,23 @@ void AddTexture(texture_renderer *TextureRenderer, const char *FilePath, uint32_
     stbi_image_free(TextureData);
 
     const char *Basename = GetBasename((char *)FilePath);
-    AddTexture(TextureRenderer, (const char *)Basename, TextureId, TextureWidth, TextureHeight);
+    tr_texture *NewTexture = AddTexture(TextureRenderer, (const char *)Basename, TextureId, TextureWidth, TextureHeight);
+    return NewTexture;
+}
+
+tr_texture *AddSubTexture(texture_renderer *TextureRenderer, const char *ParentName, const char *Name, rect2 PixelTexCoords)
+{
+    tr_texture *ParentTexture = GetTexture(TextureRenderer, ParentName);
+
+    tr_texture *NewSubTexture;
+    GetLastAndAddOne(NewSubTexture, TextureRenderer->Textures, TextureRenderer->NumTextures);
+    NewSubTexture->IsSubTexture = true;
+    NewSubTexture->Name = Name;
+    NewSubTexture->Dimensions = GetDimensions(PixelTexCoords);
+    NewSubTexture->ParentName = ParentName;
+    NewSubTexture->NormalizedTexCoords = PixelTexCoords/ParentTexture->Dimensions;
+
+    return NewSubTexture;
 }
 
 void Render(texture_renderer *TextureRenderer)
@@ -187,25 +227,11 @@ void Render(texture_renderer *TextureRenderer)
     TextureRenderer->LastTextureId = INVALID_TEXTURE_ID;
 }
 
-tr_texture *GetTexture(texture_renderer *TextureRenderer, const char *Name)
-{
-    tr_texture *Result = NULL;
-    for (int I = 0; I < TextureRenderer->NumTextures; I++)
-    {
-        tr_texture *Tex = &TextureRenderer->Textures[I];
-        if (!strcmp(Tex->Name, Name))
-        {
-            Result = Tex;
-            break;
-        }
-    }
-    Assert(Result != NULL);
-    return Result;
-}
-
 void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, tr_texture *Texture, rect2 PosCoords = RECT2(V2_ZERO, V2_ZERO), float Z = 1.0f, 
                                     rect2 TexCoords = RECT2(V2_ZERO, V2_ZERO), bool DrawReversed = false)
 {
+    Assert(!Texture->IsSubTexture);
+
     if (TextureRenderer->LastTextureId != INVALID_TEXTURE_ID)
     {
         if (TextureRenderer->LastTextureId != Texture->Id)
@@ -246,21 +272,30 @@ void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, const cha
     DrawTextureNormalizedTexCoords(TextureRenderer, Texture, PosCoords, Z, TexCoords, DrawReversed);
 }
 
-void DrawTexture(texture_renderer *TextureRenderer, const char *Name, rect2 PosCoords = RECT2_ZERO, float Z = 1.0f,
+void DrawTexture(texture_renderer *TextureRenderer, const char *Name, rect2 PosCoords, float Z = 1.0f,
                  rect2 TexCoords = RECT2_ZERO, bool DrawReversed = false)
 {
     tr_texture *Tex = GetTexture(TextureRenderer, Name);
 
-    if (TexCoords == RECT2_ZERO)
+    /* Get the normalized tex coords. */
+    rect2 NormalizedTexCoords;
+    if (Tex->IsSubTexture)
     {
-        /* Do the entire image. */
-        TexCoords = RECT2(V2(0.0f, 0.0f), V2(Tex->Dimensions.X, Tex->Dimensions.Y));
+        Assert(TexCoords == RECT2_ZERO);
+        NormalizedTexCoords = Tex->NormalizedTexCoords;
+        Name = Tex->ParentName;
     }
+    else
+    {
+        if (TexCoords == RECT2_ZERO)
+        {
+            /* Do the entire image. */
+            TexCoords = RECT2(V2(0.0f, 0.0f), V2(Tex->Dimensions.X, Tex->Dimensions.Y));
+        }
 
-    /* Normalize. */
-    rect2 NormalizedTexCoords = TexCoords/Tex->Dimensions;
-    Assert(NormalizedTexCoords.Min >= V2_ZERO && NormalizedTexCoords.Max >= V2_ZERO);
-
+        NormalizedTexCoords = TexCoords/Tex->Dimensions;
+        Assert(NormalizedTexCoords.Min >= V2_ZERO && NormalizedTexCoords.Max >= V2_ZERO);
+    }
     DrawTextureNormalizedTexCoords(TextureRenderer, Name, PosCoords, Z, NormalizedTexCoords, DrawReversed);
 }
 

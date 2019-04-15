@@ -1709,6 +1709,12 @@ bool operator==(rect2 A, rect2 B)
     return Result;
 }
 
+bool operator!=(rect2 A, rect2 B)
+{
+    bool Result = !(A == B);
+    return Result;
+}
+
 void rect2::operator/=(v2 Divisor)
 {
     this->Min /= Divisor;
@@ -1771,6 +1777,13 @@ GetSize(rect2 Rect)
 
 v2
 GetDim(rect2 Rect)
+{
+    v2 Result = GetSize(&Rect);
+    return Result;
+}
+
+v2
+GetDimensions(rect2 Rect)
 {
     v2 Result = GetSize(&Rect);
     return Result;
@@ -1889,6 +1902,17 @@ bool operator<(v2 A, v2 B)
 rect2
 RectFromPosSize(v2 Position, v2 Size)
 {
+    rect2 Result = {
+        Position,
+        Position + Size,
+    };
+    return Result;
+}
+
+rect2
+RectFromPosSize(float PositionX, float PositionY, v2 Size)
+{
+    v2 Position = V2(PositionX, PositionY);
     rect2 Result = {
         Position,
         Position + Size,

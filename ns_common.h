@@ -134,6 +134,7 @@ internal void Printf(uint32_t Value);
 #define ArrayAdd(Array, ArraySize, NewValue) if (ArraySize < ArrayCount(Array)) { Array[ArraySize++] = NewValue; } else { Assert(false); }
 #define ArrayRemove(Array, ArraySize, IndexToRemove) if (ArraySize > 0) { Array[IndexToRemove] = Array[--ArraySize]; } else { Assert(false); } 
 #define ArrayPtrAdd(Array, ArrayMaxSize, ArraySize, NewValue) if ((ArraySize) < ArrayMaxSize) { Array[(ArraySize)++] = NewValue; } else { Assert(false); }
+#define GetLastAndAddOne(ElementPointer, Array, ArrayLength) Assert(ArrayLength < ArrayCount(Array)); ElementPointer = &Array[(ArrayLength)++];
 
 template <typename element_type>
 bool CheckArrayContains(element_type *Array, int ArrayLength, element_type Value, int *IndexPtr = NULL)
