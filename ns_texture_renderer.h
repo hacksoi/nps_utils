@@ -306,10 +306,10 @@ void DrawTexture(texture_renderer *TextureRenderer, const char *Name, v2 Pos, fl
     DrawTexture(TextureRenderer, Name, PosCoords, Z, TexCoords, DrawReversed);
 }
 
-unsigned int GetTextureId(texture_renderer *TextureRenderer, const char *TextureName)
+u32 GetId(texture_renderer *TextureRenderer, const char *TextureName)
 {
     tr_texture *Texture = GetTexture(TextureRenderer, TextureName);
-    unsigned int Result = Texture->Id;
+    u32 Result = Texture->Id;
     return Result;
 }
 

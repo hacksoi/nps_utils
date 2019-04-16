@@ -659,4 +659,17 @@ uint32_t Join(uint8_t A, uint8_t B, uint8_t C, uint8_t D)
     return Result;
 }
 
+int GetLowestBitSet(u32 Value)
+{
+    int BitIdx;
+    for (BitIdx = 0; BitIdx < 8*sizeof(Value); BitIdx++)
+    {
+        if (Value & (1 << BitIdx))
+        {
+            break;
+        }
+    }
+    return BitIdx;
+}
+
 #endif
