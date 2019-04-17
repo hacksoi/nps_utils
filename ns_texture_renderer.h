@@ -84,6 +84,28 @@ void main()
 }
 )STR";
 
+/* The min and max pixel coords are the values you'd get if you put your cursor directly on top of the min and max pixels
+   of the image in paint.net. */
+rect2 GetPixelTexCoordsFromPdn(rect2 RawPixelTexCoords, v2 TextureSize)
+{
+    /* X is obvious. For Y, just know that when you flip it (by subtracting it from the height), you actually get the pixel
+       right above it. */
+    RawPixelTexCoords.Min.Y++;
+    RawPixelTexCoords.Max.X++;
+
+    RawPixelTexCoords.Min.Y = TextureSize.Y - RawPixelTexCoords.Min.Y;
+    RawPixelTexCoords.Max.Y = TextureSize.Y - RawPixelTexCoords.Max.Y;
+    rect2 Result = RECT2(RawPixelTexCoords.Min, RawPixelTexCoords.Max);
+    return Result;
+}
+
+rect2 GetNormalizedTexCoordsFromPaintDotNet(rect2 RawPixelTexCoords, v2 TextureSize)
+{
+    rect2 PixelTexCoords = GetPixelTexCoordsFromPdn(RawPixelTexCoords, TextureSize);
+    rect2 NormalizedTexCoords = PixelTexCoords/TextureSize;
+    return NormalizedTexCoords;
+}
+
 texture_renderer CreateTextureRenderer(int WindowWidth, int WindowHeight, const char *VertexShaderSource, const char *FragmentShaderSource)
 {
     texture_renderer Result = {};
@@ -199,19 +221,28 @@ tr_texture *AddTexture(texture_renderer *TextureRenderer, const char *FilePath, 
     return NewTexture;
 }
 
-tr_texture *AddSubTexture(texture_renderer *TextureRenderer, const char *ParentName, const char *Name, rect2 PixelTexCoords)
+tr_texture *AddSubTexture(texture_renderer *TextureRenderer, tr_texture *ParentTexture, const char *Name, rect2 PixelTexCoords)
 {
-    tr_texture *ParentTexture = GetTexture(TextureRenderer, ParentName);
-
-    tr_texture *NewSubTexture;
-    GetLastAndAddOne(NewSubTexture, TextureRenderer->Textures, TextureRenderer->NumTextures);
+    GetLastAndAddOne(tr_texture *NewSubTexture, TextureRenderer->Textures, TextureRenderer->NumTextures);
     NewSubTexture->IsSubTexture = true;
     NewSubTexture->Name = Name;
     NewSubTexture->Dimensions = GetDimensions(PixelTexCoords);
-    NewSubTexture->ParentName = ParentName;
+    NewSubTexture->ParentName = ParentTexture->Name;
     NewSubTexture->NormalizedTexCoords = PixelTexCoords/ParentTexture->Dimensions;
-
     return NewSubTexture;
+}
+
+tr_texture *AddSubTexture(texture_renderer *TextureRenderer, const char *ParentName, const char *Name, rect2 PixelTexCoords)
+{
+    tr_texture *ParentTexture = GetTexture(TextureRenderer, ParentName);
+    AddSubTexture(TextureRenderer, ParentTexture, Name, PixelTexCoords);
+}
+
+tr_texture *AddSubTexturePdn(texture_renderer *TextureRenderer, const char *ParentName, const char *Name, rect2 TexCoordsPdn)
+{
+    tr_texture *ParentTexture = GetTexture(TextureRenderer, ParentName);
+    rect2 PixelTexCoords = GetPixelTexCoordsFromPdn(TexCoordsPdn, ParentTexture->Dimensions);
+    AddSubTexture(TextureRenderer, ParentTexture, Name, PixelTexCoords);
 }
 
 void Render(texture_renderer *TextureRenderer)
@@ -227,8 +258,7 @@ void Render(texture_renderer *TextureRenderer)
     TextureRenderer->LastTextureId = INVALID_TEXTURE_ID;
 }
 
-void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, tr_texture *Texture, rect2 PosCoords = RECT2(V2_ZERO, V2_ZERO), float Z = 1.0f, 
-                                    rect2 TexCoords = RECT2(V2_ZERO, V2_ZERO), bool DrawReversed = false)
+void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, tr_texture *Texture, rect2 PosCoords, float Z, rect2 TexCoords, bool DrawReversed)
 {
     Assert(!Texture->IsSubTexture);
 
@@ -238,20 +268,6 @@ void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, tr_textur
         {
             Render(TextureRenderer);
         }
-    }
-
-    if (PosCoords.Min == V2_ZERO &&
-        PosCoords.Max == V2_ZERO)
-    {
-        /* Do the entire window. */
-        PosCoords = RECT2(V2(0.0f, 0.0), V2(TextureRenderer->Common.WindowWidth, TextureRenderer->Common.WindowHeight));
-    }
-
-    if (TexCoords.Min == V2_ZERO && 
-        TexCoords.Max == V2_ZERO)
-    {
-        /* Do the entire image. */
-        TexCoords = RECT2(V2(0.0f, 0.0f), V2(1.0f, 1.0f));
     }
 
     if (DrawReversed)
@@ -265,6 +281,7 @@ void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, tr_textur
     TextureRenderer->LastTextureId = Texture->Id;
 }
 
+#if 0
 void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, const char *Name, rect2 PosCoords = RECT2_ZERO, float Z = 1.0f, 
                                     rect2 TexCoords = RECT2_ZERO, bool DrawReversed = false)
 {
@@ -304,6 +321,14 @@ void DrawTexture(texture_renderer *TextureRenderer, const char *Name, v2 Pos, fl
     v2 TexCoordsDimensions = GetSize(TexCoords);
     rect2 PosCoords = RECT2(Pos, Pos + TexCoordsDimensions);
     DrawTexture(TextureRenderer, Name, PosCoords, Z, TexCoords, DrawReversed);
+}
+#endif
+
+void DrawTexture(texture_renderer *TextureRenderer, const char *Name, v2 Pos, float Z, bool DrawReversed = false)
+{
+    tr_texture *Tex = GetTexture(TextureRenderer, Name);
+    rect2 PosCoords = RectFromPosSize(Pos, Tex->Dimensions);
+    DrawTextureNormalizedTexCoords(TextureRenderer, Tex, PosCoords, Z, Tex->NormalizedTexCoords, DrawReversed);
 }
 
 u32 GetId(texture_renderer *TextureRenderer, const char *TextureName)
