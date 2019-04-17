@@ -2763,6 +2763,12 @@ v2 Remap(v2 V, rect2 From, rect2 To)
     return Result;
 }
 
+void Clamp(v2 *V, rect2 Bounds)
+{
+    Clamp(&V->X, Bounds.Min.X, Bounds.Max.X);
+    Clamp(&V->Y, Bounds.Min.Y, Bounds.Max.Y);
+}
+
 /* Print functions. */
 
 void Printf(const char *VName, v2 V)

@@ -222,16 +222,27 @@ Floor(float A)
 inline internal float
 Clamp01(float X)
 {
-    if(X < 0.0f)
+    if (X < 0.0f)
     {
         X = 0.0f;
     }
-    else if(X > 1.0f)
+    else if (X > 1.0f)
     {
         X = 1.0f;
     }
-
     return X;
+}
+
+void Clamp(float *X, float Min, float Max)
+{
+    if (*X < Min)
+    {
+        *X = Min;
+    }
+    else if (*X > Max)
+    {
+        *X = Max;
+    }
 }
 
 inline internal float
