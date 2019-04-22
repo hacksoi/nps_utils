@@ -22,10 +22,6 @@ struct tr_texture
     const char *Name;
     v2 Dimensions;
     GLuint Id;
-
-    /* Sub texture stuff. */
-    const char *ParentName;
-    rect2 NormalizedTexCoords;
 };
 
 struct texture_renderer
@@ -43,6 +39,8 @@ const char *GlobalTextureRendererVertexShaderSource = R"STR(
 layout (location = 0) in vec3 Pos;
 layout (location = 1) in vec2 vsTexCoord;
 
+#define MAX_Z 128.0f
+
 uniform float Zoom;
 uniform vec2 WindowDimensions;
 uniform vec2 CameraPos;
@@ -53,7 +51,23 @@ void main()
 {
     vec2 HalfWindowDimensions = 0.5f*WindowDimensions;
     vec2 CameraPosAdjusted = CameraPos - HalfWindowDimensions;
-    vec2 CameraPosZAdjusted = CameraPosAdjusted/Pos.z;
+
+    /* In the game, Z = 0 means Z = 1.0. */
+    float ZAdjusted;
+    if (Pos.z == 0.0f)
+    {
+        ZAdjusted = 1.0f;
+    }
+    else if (Pos.z > 0.0f)
+    {
+        ZAdjusted = 1.0f + Pos.z;
+    }
+    else
+    {
+        ZAdjusted = 1.0f/(1.0f + abs(Pos.z));
+    }
+
+    vec2 CameraPosZAdjusted = CameraPosAdjusted/ZAdjusted;
     vec2 ViewSpacePos = Pos.xy - CameraPosZAdjusted;
     /* Apply zoom. */
     vec2 RelToCenter = ViewSpacePos - HalfWindowDimensions;
@@ -61,7 +75,7 @@ void main()
 
     vec2 SnappedViewSpacePos = floor(ViewSpacePos);
     vec2 ClipPos = ((2.0f * SnappedViewSpacePos) / WindowDimensions) - 1.0f;
-    gl_Position = vec4(ClipPos, 0.0, 1.0f);
+    gl_Position = vec4(ClipPos, 0.0f, 1.0f);
 
     fsTexCoord = vsTexCoord;
 }
@@ -221,6 +235,7 @@ tr_texture *AddTexture(texture_renderer *TextureRenderer, const char *FilePath, 
     return NewTexture;
 }
 
+#if 0
 tr_texture *AddSubTexture(texture_renderer *TextureRenderer, tr_texture *ParentTexture, const char *Name, rect2 PixelTexCoords)
 {
     GetLastAndAddOne(tr_texture *NewSubTexture, TextureRenderer->Textures, TextureRenderer->NumTextures);
@@ -244,6 +259,7 @@ tr_texture *AddSubTexturePdn(texture_renderer *TextureRenderer, const char *Pare
     rect2 PixelTexCoords = GetPixelTexCoordsFromPdn(TexCoordsPdn, ParentTexture->Dimensions);
     AddSubTexture(TextureRenderer, ParentTexture, Name, PixelTexCoords);
 }
+#endif
 
 void Render(texture_renderer *TextureRenderer)
 {
@@ -258,7 +274,7 @@ void Render(texture_renderer *TextureRenderer)
     TextureRenderer->LastTextureId = INVALID_TEXTURE_ID;
 }
 
-void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, tr_texture *Texture, rect2 PosCoords, float Z, rect2 TexCoords, bool DrawReversed)
+void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, tr_texture *Texture, rect2 PosCoords, float Z, rect2 NormalizedTexCoords, bool DrawReversed)
 {
     Assert(!Texture->IsSubTexture);
 
@@ -272,11 +288,11 @@ void DrawTextureNormalizedTexCoords(texture_renderer *TextureRenderer, tr_textur
 
     if (DrawReversed)
     {
-        Swap(&TexCoords.Min.X, &TexCoords.Max.X);
+        Swap(&NormalizedTexCoords.Min.X, &NormalizedTexCoords.Max.X);
     }
 
     InsertTexture((float *)TextureRenderer->Common.VertexData, TextureRenderer->Common.MaxVertexDataBytes, &TextureRenderer->Common.NumVertexData,
-                  QUAD2(PosCoords), Z, QUAD2(TexCoords));
+                  QUAD2(PosCoords), Z, QUAD2(NormalizedTexCoords));
 
     TextureRenderer->LastTextureId = Texture->Id;
 }
@@ -324,11 +340,22 @@ void DrawTexture(texture_renderer *TextureRenderer, const char *Name, v2 Pos, fl
 }
 #endif
 
-void DrawTexture(texture_renderer *TextureRenderer, const char *Name, v2 Pos, float Z, bool DrawReversed = false)
+void DrawTexturePdn(texture_renderer *TextureRenderer, const char *Name, v2 Pos, float Z, rect2 PixelTexCoordsPdn, bool DrawReversed = false)
 {
     tr_texture *Tex = GetTexture(TextureRenderer, Name);
-    rect2 PosCoords = RectFromPosSize(Pos, Tex->Dimensions);
-    DrawTextureNormalizedTexCoords(TextureRenderer, Tex, PosCoords, Z, Tex->NormalizedTexCoords, DrawReversed);
+    rect2 PixelTexCoords = GetPixelTexCoordsFromPdn(PixelTexCoordsPdn, Tex->Dimensions);
+    rect2 NormalizedTexCoords = PixelTexCoords/Tex->Dimensions;
+    v2 Size = GetSize(PixelTexCoords);
+    rect2 PosCoords = RectFromPosSize(Pos, Size);
+    DrawTextureNormalizedTexCoords(TextureRenderer, Tex, PosCoords, Z, NormalizedTexCoords, DrawReversed);
+}
+
+void DrawTexture(texture_renderer *TextureRenderer, const char *Name, v2 Pos, v2 Size)
+{
+    tr_texture *Tex = GetTexture(TextureRenderer, Name);
+    rect2 NormalizedTexCoords = RECT2(0.0f, 0.0f, 1.0f, 1.0f);
+    rect2 PosCoords = RectFromPosSize(Pos, Size);
+    DrawTextureNormalizedTexCoords(TextureRenderer, Tex, PosCoords, 1.0f, NormalizedTexCoords, false);
 }
 
 u32 GetId(texture_renderer *TextureRenderer, const char *TextureName)
@@ -336,6 +363,14 @@ u32 GetId(texture_renderer *TextureRenderer, const char *TextureName)
     tr_texture *Texture = GetTexture(TextureRenderer, TextureName);
     u32 Result = Texture->Id;
     return Result;
+}
+
+rect2 GetNormalizedTexCoordsPdn(texture_renderer *TextureRenderer, const char *TextureName, rect2 PixelTexCoordsPdn)
+{
+    tr_texture *Texture = GetTexture(TextureRenderer, TextureName);
+    rect2 PixelTexCoords = GetPixelTexCoordsFromPdn(PixelTexCoordsPdn, Texture->Dimensions);
+    rect2 NormalizedTexCoords = PixelTexCoords/Texture->Dimensions;
+    return NormalizedTexCoords;
 }
 
 void SetCameraPos(texture_renderer *TextureRenderer, v2 NewCameraPos)

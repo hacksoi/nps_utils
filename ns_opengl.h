@@ -234,7 +234,6 @@ InsertQuad(quad2 Quad, float *VertexData, int *VertexDataCount)
 internal void
 InsertTexture(float *VertexData, int MaxVertexDataBytes, int *NumVertexData, quad2 Positions, float Z, quad2 TexCoord)
 {
-    Assert(Z != 0.0f);
     Assert(*NumVertexData + 30 <= MaxVertexDataBytes);
 
     {
