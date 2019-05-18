@@ -9,6 +9,19 @@
 #define V2I_ZERO V2I(0, 0)
 #define RECT2_ZERO RECT2(V2_ZERO, V2_ZERO)
 
+enum sign
+{
+    Sign_Negative = 0,
+    Sign_Positive = 1,
+};
+
+enum axis
+{
+    Axis_X = 0, 
+    Axis_Y,
+    Axis_None,
+};
+
 union v2
 {
     float Components[2];

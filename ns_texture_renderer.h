@@ -163,7 +163,7 @@ tr_texture *AddTexture(texture_renderer *TextureRenderer, const char *Name, unsi
     Assert(TextureId != 0);
 
     tr_texture *NewTexture;
-    GetLastAndAddOne(NewTexture, TextureRenderer->Textures, TextureRenderer->NumTextures);
+    ArrayGetLastAndAddOne(NewTexture, TextureRenderer->Textures, TextureRenderer->NumTextures);
     NewTexture->Name = Name;
     NewTexture->Dimensions = V2(TextureWidth, TextureHeight);
     NewTexture->Id = TextureId;
