@@ -7,18 +7,8 @@ struct collision
 {
     int EntityA;
     int EntityB;
-
-    union
-    {
-        struct
-        {
-            bool IntersectedLeft;
-            bool IntersectedRight;
-            bool IntersectedBottom;
-            bool IntersectedTop;
-        };
-        bool IntersectedValues[4];
-    };
+    direction IntersectionDirection;
+    struct collision *Next;
 };
 
 bool CheckCollidesWith(rect2 ABoundingBox, v2 ADelta,
@@ -32,39 +22,48 @@ bool CheckCollidesWith(rect2 ABoundingBox, v2 ADelta,
    It returns the collisions in the specified array; each collision involves
    2 entities, and therefore two collisions are generated for each collision -
    one where entity X is EntityA is first, and one where entity Y is EntityB -
-   we do this because it is easier on the user. */
+   we do this because it is easier on the user.
+   
+   A touch is not a collision - the definition of a collision is that the two objects
+   overlapped due a change in delta; a touch is where the two objects abutt with no
+   delta. */
 void DoCollisionDetection(collision *Collisions, int CollisionsSize, int *NumCollisionsPtr,
-                          rect2 *BoundingBoxes, v2 *InputDeltas, v2 *OutputDeltas, bool *AffectedByCollisions, bool *Skip,
+                          rect2 *BoundingBoxes, v2 *InputDeltas, bool *Skip,
+                          v2 *OutputDeltas, v2 *Touches,
                           int NumEntities)
 {
     *NumCollisionsPtr = 0;
 
     for_ (CurEntityIdx, NumEntities)
     {
+        if (Skip[CurEntityIdx])
+        {
+            continue;
+        }
+
         float ClosestT = FLT_MAX;
         axis ClosestAxis;
         int EntityIdxCollidedWith;
         for_ (EntityIdx, NumEntities)
         {
-            if (EntityIdx == CurEntityIdx)
+            if (EntityIdx == CurEntityIdx ||
+                Skip[EntityIdx])
             {
                 continue;
             }
 
-            if (!Skip[EntityIdx])
+            float t;
+            axis Axis;
+            bool CollidesWith = CheckCollidesWith(BoundingBoxes[CurEntityIdx], InputDeltas[CurEntityIdx],
+                                                  BoundingBoxes[EntityIdx], InputDeltas[EntityIdx],
+                                                  &t, &Axis);
+            if (CollidesWith)
             {
-                float t;
-                axis Axis;
-                bool CollidesWith = CheckCollidesWith(BoundingBoxes[CurEntityIdx], InputDeltas[CurEntityIdx],
-                                                      BoundingBoxes[EntityIdx], InputDeltas[EntityIdx],
-                                                      &t, &Axis);
-                if (CollidesWith)
+                if (t < ClosestT)
                 {
-                    if (t < ClosestT)
-                    {
-                        ClosestT = t;
-                        ClosestAxis = Axis;
-                    }
+                    ClosestT = t;
+                    ClosestAxis = Axis;
+                    EntityIdxCollidedWith = EntityIdx;
                 }
             }
         }
@@ -97,7 +96,7 @@ void DoCollisionDetection(collision *Collisions, int CollisionsSize, int *NumCol
                 if (!Skip[EntityIdx])
                 {
                     float t;
-                    axis Axis;
+                    axis Axis; /* Note that the axis must be the non-collision-axis, since the delta for the collision-axis should be zero. */
                     bool CollidesWith = CheckCollidesWith(BoundingBoxes[CurEntityIdx], NewDelta,
                                                           BoundingBoxes[EntityIdx], InputDeltas[EntityIdx],
                                                           &t, &Axis);
